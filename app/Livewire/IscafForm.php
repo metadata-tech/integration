@@ -2,7 +2,7 @@
 
 namespace App\Livewire;
 
-use App\Service\IscafService;
+use App\Services\IscafService;
 use Livewire\Component;
 
 class IscafForm extends Component

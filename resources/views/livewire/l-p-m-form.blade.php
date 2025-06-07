@@ -40,6 +40,32 @@
 
             @dump($this->result)
 
+            Pelajar : {{ $this->result[0]["pelajar"] }} <br>
+            KP : {{ $this->result[0]["kp"] }} <br>
+            Tahun : {{ $this->result[0]["tahun"] }} <br>
+            Ringkasan : {{ $this->result[0]["ringkasan"] }} <br>
+            AKG : {{ $this->result[0]["akg"] }} <br>
+
+            <table class="table-auto">
+                <thead>
+                    <th>NAMA</th>
+                    <th>KOD</th>
+                    <th>GRED</th>
+                </thead>
+                <tbody>
+            @foreach($this->result[0]["data"] as $v)
+                <tr>
+                    <td>{{ $v["nama"] }}</td>
+                    <td>{{$v["kod"]}}</td>
+                    <td>{{$v["gred"]}}</td>
+                </tr>
+
+
+            @endforeach
+                </tbody>
+            </table>
+
+
         @endif
 
 

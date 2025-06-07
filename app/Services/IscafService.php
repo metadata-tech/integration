@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Service;
+namespace App\Services;
 use App\Models\APILog;
 
 use App\Models\iscaf\App;
@@ -19,9 +19,15 @@ class IscafService {
             ->orderBy('id', 'desc')
             ->first();
 
+        // todo filter with FileStatus
+
         ray($app)->purple();
+        if($app == null) {
+            return null;
+        }
 
         //dump($app->file->historyDocumentNumber);
+        //dd($app->file);
 
         $userDefineValuesAry = [
             "name" => "HASSAN TEST",
@@ -32,48 +38,29 @@ class IscafService {
 
         if(count($app->file->historyDocumentNumber) > 0) {
             Log::info("sudah ada historyDocumentNumber");
-
-
             $last_document_number = $app->file->historyDocumentNumber->last()->value;
             Log::info("nombor sekarang adalah ".$last_document_number);
-
             $new_document_number = $last_document_number + 1;
-
-            Log::info("nombor baru adalah ".$new_document_number);
-
-            $app->file->historyDocumentNumber()->create([
-                'value' => $new_document_number,
-                'activity' => $activity_id,
-                'user_id' => $user_id,
-                'user_defined_values' => json_encode($userDefineValuesAry)
-            ]);
-
-            $app->file->update([
-                'document_number' => $new_document_number
-            ]);
-
-
         }
         else if (count($app->file->historyDocumentNumber) == 0) {
             Log::info("tiada historyDocumentNumber");
-
-
             $new_document_number = 1;
-            Log::info("nombor baru adalah ".$new_document_number);
-
-            $app->file->historyDocumentNumber()->create([
-                'value' => $new_document_number,
-                'activity' => $activity_id,
-                'user_id' => $user_id,
-                'user_defined_values' => json_encode($userDefineValuesAry)
-            ]);
-
-            $app->file->update([
-                'document_number' => $new_document_number
-            ]);
-
-            Log::info("berjaya tambah");
         }
+
+        Log::info("nombor baru adalah ".$new_document_number);
+
+        $app->file->historyDocumentNumber()->create([
+            'value' => $new_document_number,
+            'activity' => $activity_id,
+            'user_id' => $user_id,
+            'user_defined_values' => json_encode($userDefineValuesAry)
+        ]);
+
+        $app->file->update([
+            'document_number' => $new_document_number
+        ]);
+
+        Log::info("berjaya tambah");
         ray($app)->red();
 
 

@@ -11,7 +11,7 @@ export default {
         './resources/views/**/*.blade.php',
     ],
 
-    darkMode: 'class', // Set to 'class' to enable class-based dark mode
+    darkMode: 'false', // Set to 'class' to enable class-based dark mode
 
     theme: {
         extend: {

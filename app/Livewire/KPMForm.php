@@ -2,8 +2,8 @@
 
 namespace App\Livewire;
 
-use App\Service\KPMService;
-use App\Service\LPMService;
+use App\Services\KPMService;
+use App\Services\LPMService;
 use Livewire\Component;
 
 class KPMForm extends Component

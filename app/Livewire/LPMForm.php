@@ -2,7 +2,8 @@
 
 namespace App\Livewire;
 
-use App\Service\LPMService;
+use App\Services\LPMService;
+use App\Services\LPMSVKService;
 use Livewire\Component;
 
 class LPMForm extends Component
@@ -30,6 +31,8 @@ class LPMForm extends Component
         $this->no_kp = "880415016011";
         $this->tahun = "2005";
 
+        $this->angka_giliran = "BA105A086";
+
     }
 
     public function render()
@@ -37,13 +40,13 @@ class LPMForm extends Component
         return view('livewire.l-p-m-form');
     }
 
-    public function process(LPMService $service)
+    public function process(LPMSVKService $service)
     {
         ray("call API");
         ray($this->lpmService);
         #$this->lpmService = app(LPMService::class);
         $this->lpmService = $service;
-        $x = $this->lpmService->callAPI($this->no_kp, $this->tahun);
+        $x = $this->lpmService->callAPI($this->no_kp, $this->tahun, $this->angka_giliran);
         ray($x);
 
         $this->result = $x;

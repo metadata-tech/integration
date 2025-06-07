@@ -38,6 +38,12 @@ return [
         'api_key' => env('lpm_key'),
         'url' => env('lpm_url'),
     ],
+    'lpm_svk' => [
+        'api_key' => env('lpm_svk_key'),
+        'url' => env('lpm_svk_url'),
+        'email' => env('lpm_svk_email'),
+        'password' => env('lpm_svk_password'),
+    ],
     'kpm' => [
         'api_key' => env('kpm_key'),
         'url' => env('kpm_url'),

@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Service\TokenService;
+use App\Services\TokenService;
 
 class LogAPIController extends Controller
 {
