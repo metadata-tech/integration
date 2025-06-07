@@ -19,6 +19,10 @@
                     <x-nav-link href="{{ route('logapi.index') }}" :active="request()->routeIs('logapi.index')">
                         {{ __('Logs API') }}
                     </x-nav-link>
+
+                    <x-nav-link href="{{ route('user_management.index') }}" :active="request()->routeIs('user_management.index')">
+                        {{ __('Users Management') }}
+                    </x-nav-link>
                 </div>
             </div>
 

@@ -11,8 +11,7 @@ Route::middleware([
     config('jetstream.auth_session'),
     'verified',
 ])->group(function () {
-    Route::get('/dashboard', function (\App\Service\LPMService $lpmService) {
-        //dd($lpmService->callAPI());
+    Route::get('/dashboard', function () {
         return view('dashboard');
     })->name('dashboard');
 
