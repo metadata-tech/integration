@@ -10,7 +10,7 @@ class LiveLogAPI extends Component
 {
     use WithPagination;
 
-    public $items = [];
+    //public $items = [];
     public $startDate = '';
     public $endDate = '';
     public $perPage = 15;
@@ -57,9 +57,12 @@ class LiveLogAPI extends Component
                 return $query->whereDate('created_at', '<=', $this->endDate);
             })
             ->orderBy('id', 'desc');
-        $query = APILog::query();
-        $this->items = $query->paginate($this->perPage);
+        #$query = APILog::query();
+        ray($query->paginate(10))->purple();;
+        #$this->items = $query->paginate($this->perPage);
 
-        return view('livewire.live-log-api');
+        return view('livewire.live-log-api',[
+            'logs' => $query->paginate($this->perPage)
+        ]);
     }
 }

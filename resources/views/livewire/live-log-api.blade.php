@@ -19,11 +19,11 @@
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200">
                             @php $counter = 1; @endphp
-                            @foreach($items as $k => $v)
+                            @foreach($logs as $k => $v)
                                 <tr class="@if($loop->even) bg-gray-50 @endif hover:bg-gray-100 transition-colors duration-200">
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                         <div class="font-medium">{{ $counter++ }}</div>
-                                        <div class="text-xs text-gray-400">{{ $v->created_at }}</div>
+
                                     </td>
                                     <td class="px-6 py-4">
                                         <div class="space-y-4">
@@ -45,6 +45,10 @@
                                                     @endif">
                                                     {{ $v["status_code"] }}
                                                 </span>
+                                            </div>
+                                            <div class="text-xs text-gray-400">
+                                                {{ \Carbon\Carbon::parse($v->created_at)->format('j F Y g:i A') }}
+                                                <span class="ml-1 text-gray-500">({{ \Carbon\Carbon::parse($v->created_at)->diffForHumans() }})</span>
                                             </div>
 
                                             <!-- Token -->
