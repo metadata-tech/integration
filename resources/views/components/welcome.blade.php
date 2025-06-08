@@ -12,6 +12,8 @@
         ecosystem to be a breath of fresh air. We hope you love it.
     </p>--}}
 
+    <livewire:counter />
+
     <livewire:l-p-m-form />
 
     <livewire:k-p-m-form />

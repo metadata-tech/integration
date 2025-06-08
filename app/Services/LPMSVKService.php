@@ -37,11 +37,20 @@ class LPMSVKService {
 
         ray($response->json());
 
+        $log->update([
+            'output' => $response->json(),
+            'status_code' => $response->getStatusCode()
+        ]);
+
         return $response;
     }
 
     public function callAPI($no_kp, $tahun, $akg)
     {
+        $token = null;
+        if (empty($this->GetToken()->json()['user'])) {
+            return null;
+        }
         $token = $this->GetToken()->json()['user']['_token'];
         ray($token);
         #dd($token);

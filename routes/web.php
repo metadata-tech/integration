@@ -29,6 +29,18 @@ Route::middleware([
         Route::get('/profile/{user}/{role}', [UserController::class, 'getUserProfile'])->name('profile');*/
     });
 
+    /**
+     ** Admin Management Pages (Livewire)
+     */
+    Route::prefix('admin')->name('admin.')->group(function () {
+        // Users Management (Livewire)
+        Route::view('/users', 'admin.users.index')->name('users.index');
+        // Roles Management (Livewire)
+        Route::view('/roles', 'admin.roles.index')->name('roles.index');
+        // Permissions Management (Livewire)
+        Route::view('/permissions', 'admin.permissions.index')->name('permissions.index');
+    });
+
 });
 
 

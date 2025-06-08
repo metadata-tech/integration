@@ -66,4 +66,7 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    protected string $guard_name = 'sanctum';
+    protected function getDefaultGuardName(): string { return $this->guard_name; }
 }

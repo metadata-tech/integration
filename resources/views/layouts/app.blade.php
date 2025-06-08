@@ -18,6 +18,8 @@
         @livewireStyles
     </head>
     <body class="font-sans antialiased">
+        <livewire:notifications />
+
         <x-banner />
 
         <div class="min-h-screen bg-gray-100 dark:bg-gray-900">

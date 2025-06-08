@@ -20,8 +20,16 @@
                         {{ __('Logs API') }}
                     </x-nav-link>
 
-                    <x-nav-link href="{{ route('user_management.index') }}" :active="request()->routeIs('user_management.index')">
+                    <x-nav-link href="{{ route('admin.users.index') }}" :active="request()->routeIs('admin.users.index')">
                         {{ __('Users Management') }}
+                    </x-nav-link>
+
+                    <x-nav-link href="{{ route('admin.roles.index') }}" :active="request()->routeIs('admin.roles.index')">
+                        {{ __('Roles Management') }}
+                    </x-nav-link>
+
+                    <x-nav-link href="{{ route('admin.permissions.index') }}" :active="request()->routeIs('admin.permissions.index')">
+                        {{ __('Permissions Management') }}
                     </x-nav-link>
                 </div>
             </div>
@@ -149,6 +157,22 @@
         <div class="pt-2 pb-3 space-y-1">
             <x-responsive-nav-link href="{{ route('dashboard') }}" :active="request()->routeIs('dashboard')">
                 {{ __('Dashboard') }}
+            </x-responsive-nav-link>
+
+            <x-responsive-nav-link href="{{ route('logapi.index') }}" :active="request()->routeIs('logapi.index')">
+                {{ __('Logs API') }}
+            </x-responsive-nav-link>
+
+            <x-responsive-nav-link href="{{ route('admin.users.index') }}" :active="request()->routeIs('admin.users.index')">
+                {{ __('Users Management') }}
+            </x-responsive-nav-link>
+
+            <x-responsive-nav-link href="{{ route('admin.roles.index') }}" :active="request()->routeIs('admin.roles.index')">
+                {{ __('Roles Management') }}
+            </x-responsive-nav-link>
+
+            <x-responsive-nav-link href="{{ route('admin.permissions.index') }}" :active="request()->routeIs('admin.permissions.index')">
+                {{ __('Permissions Management') }}
             </x-responsive-nav-link>
         </div>
 
