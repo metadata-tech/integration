@@ -18,6 +18,8 @@
 
     <livewire:k-p-m-form />
 
+    <livewire:k-p-t-form />
+
     <livewire:iscaf-form />
 </div>
 

@@ -49,4 +49,10 @@ return [
         'url' => env('kpm_url'),
     ],
 
+    'kpt_esis' => [
+        'url' => env('kpt_esis_url'),
+        'username' => env('kpt_esis_username'),
+        'password' => env('kpt_esis_password'),
+    ],
+
 ];
