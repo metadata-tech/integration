@@ -6,7 +6,7 @@ use App\Models\APILog;
 use Livewire\Component;
 use Livewire\WithPagination;
 
-class LiveLogAPI extends Component
+class LiveLogApi extends Component
 {
     use WithPagination;
 
