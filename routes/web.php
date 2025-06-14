@@ -1,5 +1,5 @@
 <?php
-
+use App\Http\Controllers\Admin\UserTokenController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -39,8 +39,13 @@ Route::middleware([
         Route::view('/roles', 'admin.roles.index')->name('roles.index');
         // Permissions Management (Livewire)
         Route::view('/permissions', 'admin.permissions.index')->name('permissions.index');
+
+         // User token management
+        Route::get('/{user}/tokens', [UserTokenController::class, 'index'])->name('user-tokens.index');
+        Route::post('/{user}/tokens', [UserTokenController::class, 'store'])->name('user-tokens.store');
+        Route::put('/{user}/tokens/{token}', [UserTokenController::class, 'update'])->name('user-tokens.update');
+        Route::delete('/{user}/tokens/{token}', [UserTokenController::class, 'destroy'])->name('user-tokens.destroy');
     });
 
 });
-
 
