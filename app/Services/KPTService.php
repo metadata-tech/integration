@@ -12,7 +12,7 @@ class KPTService {
             "username" => config('services.kpt_esis.username'),
             "password" => config('services.kpt_esis.password'),
         ];
-        ray($request_data);
+
         //$headers = ['x-api-key' => config('services.lpm.api_key')];
         $headers['Content-Type'] = 'application/json';
         $headers['Accept'] = 'application/json';
@@ -34,7 +34,7 @@ class KPTService {
             ->post($url, $request_data);
 
 
-        ray($response->json());
+        #ray($response->json());
 
         $log->update([
             'output' => $response->json(),
@@ -46,13 +46,13 @@ class KPTService {
     public function callAPI($no_kp)
     {
         $token = null;
-        ray($this->GetToken()->json()['token']);
-        #dd('asd');
+        #ray($this->GetToken()->json()['token']);
+
         if (empty($this->GetToken()->json()['token'])) {
             return null;
         }
         $token = $this->GetToken()->json();
-        ray($token);
+        #ray($token);
 
         $request_data = [
         ];
@@ -76,6 +76,7 @@ class KPTService {
 
 
         ray($response);
+        ray($response->json());
 
         $log->update([
             'output' => $response->json(),

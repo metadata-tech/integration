@@ -35,6 +35,7 @@ class KPMService {
 
 
         ray($response);
+        ray($response->json());
 
         $log->update([
             'output' => $response->json(),
