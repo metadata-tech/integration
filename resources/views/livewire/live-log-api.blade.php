@@ -48,7 +48,7 @@
                                             </div>
                                             <div class="text-xs text-gray-400">
                                                 {{ \Carbon\Carbon::parse($v->created_at)->format('j F Y g:i A') }}
-                                                <span class="ml-1 text-gray-500">({{ \Carbon\Carbon::parse($v->created_at)->diffForHumans() }})</span>
+                                                <span class="ml-1 text-gray-500">({{ \Carbon\Carbon::parse($v->created_at)->diffForHumans() }}) by {{ $v->user->name }}</span>
                                             </div>
 
                                             <!-- Token -->

@@ -56,6 +56,7 @@ class LiveLogApi extends Component
             ->when($this->endDate, function($query) {
                 return $query->whereDate('created_at', '<=', $this->endDate);
             })
+            ->with('user')
             ->orderBy('id', 'desc');
         #$query = APILog::query();
         ray($query->paginate(10))->purple();;
