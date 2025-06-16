@@ -44,7 +44,7 @@ class LPMForm extends Component
     {
         ray("call API");
         ray($this->lpmService);
-        #$this->lpmService = app(LPMService::class);
+
         $this->lpmService = $service;
         $x = $this->lpmService->callAPI($this->no_kp, $this->tahun, $this->angka_giliran);
         ray($x);

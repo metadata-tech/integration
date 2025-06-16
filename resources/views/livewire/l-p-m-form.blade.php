@@ -2,7 +2,7 @@
     {{-- Knowing others is intelligence; knowing yourself is true wisdom. --}}
 
     <h1 class="mt-8 text-2xl font-medium text-gray-900 dark:text-white">
-        Integrasi Lembaga Peperiksaan SVK
+        Integrasi Lembaga Peperiksaan SVK SPM
     </h1>
 
     <form wire:submit="process">

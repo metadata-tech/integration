@@ -52,14 +52,14 @@ class LPMSVKService {
             return null;
         }
         $token = $this->GetToken()->json()['user']['_token'];
-        ray($token);
+        #ray($token);
         #dd($token);
         $request_data = [
             "tahun" => $tahun,
             "nic" => $no_kp,
             "akg" => $akg,
         ];
-        ray($request_data);
+        #ray($request_data);
         $headers = ['Authorization' => 'Bearer '.$token];
 
         $url = config('services.lpm_svk.url')."/api/verification/spm";
@@ -79,6 +79,7 @@ class LPMSVKService {
 
 
         ray($response);
+        ray($response->json());
 
         $log->update([
             'output' => $response->json(),
@@ -91,14 +92,14 @@ class LPMSVKService {
     public function callAPISPMUlangan($no_kp, $tahun, $akg)
     {
         $token = $this->GetToken()->json()['user']['_token'];
-        ray($token);
+        #ray($token);
         #dd($token);
         $request_data = [
             "tahun" => $tahun,
             "nic" => $no_kp,
             "akg" => $akg,
         ];
-        ray($request_data);
+        #ray($request_data);
         $headers = ['Authorization' => 'Bearer '.$token];
 
         $url = config('services.lpm_svk.url')."/api/verification/spmu";
@@ -118,6 +119,7 @@ class LPMSVKService {
 
 
         ray($response);
+        ray($response->json());
 
         $log->update([
             'output' => $response->json(),

@@ -15,6 +15,7 @@
     <livewire:counter />
 
     <livewire:l-p-m-form />
+    <livewire:l-p-m-s-v-k-s-p-m-ulangan-form />
 
     <livewire:k-p-m-form />
 

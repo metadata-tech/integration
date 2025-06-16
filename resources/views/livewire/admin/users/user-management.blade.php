@@ -56,7 +56,7 @@
                         </button>
 
                         <x-nav-link target="_blank" href="{{ route('admin.user-tokens.index', $user) }}" :active="request()->routeIs('admin.user-tokens.index')">
-                            {{ __('Token Management') }}
+                            {{ __('API Token Management') }}
                         </x-nav-link>
                     </td>
                 </tr>
