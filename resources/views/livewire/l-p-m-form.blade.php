@@ -34,38 +34,44 @@
         </x-button>
 
         @if($this->result != null)
-            <h1 class="mt-8 text-2xl font-medium text-gray-900 dark:text-white">
-                Result
-            </h1>
 
-            @dump($this->result)
+            @if(isset($this->result["status"]) && $this->result["status"] == false)
+                <div class="text-red-500">
+                    {{ $this->result["message"] }}
+                </div>
+            @else
+                <h1 class="mt-8 text-2xl font-medium text-gray-900 dark:text-white">
+                    Result
+                </h1>
 
-            Pelajar : {{ $this->result[0]["pelajar"] }} <br>
-            KP : {{ $this->result[0]["kp"] }} <br>
-            Tahun : {{ $this->result[0]["tahun"] }} <br>
-            Ringkasan : {{ $this->result[0]["ringkasan"] }} <br>
-            AKG : {{ $this->result[0]["akg"] }} <br>
+                @dump($this->result)
 
-            <table class="table-auto">
-                <thead>
-                    <th>NAMA</th>
-                    <th>KOD</th>
-                    <th>GRED</th>
-                </thead>
-                <tbody>
-            @foreach($this->result[0]["data"] as $v)
-                <tr>
-                    <td>{{ $v["nama"] }}</td>
-                    <td>{{$v["kod"]}}</td>
-                    <td>{{$v["gred"]}}</td>
-                </tr>
+                Pelajar : {{ $this->result[0]["pelajar"] }} <br>
+                KP : {{ $this->result[0]["kp"] }} <br>
+                Tahun : {{ $this->result[0]["tahun"] }} <br>
+                Ringkasan : {{ $this->result[0]["ringkasan"] }} <br>
+                AKG : {{ $this->result[0]["akg"] }} <br>
 
-
-            @endforeach
-                </tbody>
-            </table>
+                <table class="table-auto">
+                    <thead>
+                        <th>NAMA</th>
+                        <th>KOD</th>
+                        <th>GRED</th>
+                    </thead>
+                    <tbody>
+                @foreach($this->result[0]["data"] as $v)
+                    <tr>
+                        <td>{{ $v["nama"] }}</td>
+                        <td>{{$v["kod"]}}</td>
+                        <td>{{$v["gred"]}}</td>
+                    </tr>
 
 
+                @endforeach
+                    </tbody>
+                </table>
+
+            @endif
         @endif
 
 

@@ -59,7 +59,7 @@ class LiveLogApi extends Component
             ->with('user')
             ->orderBy('id', 'desc');
         #$query = APILog::query();
-        ray($query->paginate(10))->purple();;
+        #ray($query->paginate(10))->purple();;
         #$this->items = $query->paginate($this->perPage);
 
         return view('livewire.live-log-api',[

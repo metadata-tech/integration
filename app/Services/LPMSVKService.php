@@ -47,11 +47,19 @@ class LPMSVKService {
 
     public function callAPI($no_kp, $tahun, $akg)
     {
-        $token = null;
+        /*$token = null;
         if (empty($this->GetToken()->json()['user'])) {
             return null;
         }
-        $token = $this->GetToken()->json()['user']['_token'];
+        $token = $this->GetToken()->json()['user']['_token'];*/
+
+        $response = $this->GetToken();
+        $responseData = $response->json();
+        $token = $responseData['user']['_token'] ?? null;
+
+        if (!$token) {
+            return $responseData; // Handle case where token is not available
+        }
         #ray($token);
         #dd($token);
         $request_data = [
