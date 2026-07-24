@@ -1,0 +1,54 @@
+<?php
+
+namespace App\Services;
+use App\Models\APILog;
+use App\Models\iscaf\App;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+
+class JPNService {
+
+
+    public function callAPI($no_kp)
+    {
+        $request_data = [
+            "ic_number" => $no_kp
+
+        ];
+
+        $headers = ['X-API-KEY' => config('services.jpn.api_key')];
+
+        $url = config('services.jpn.url');
+
+        $log = APILog::create([
+            'method' => 'GET',
+            'input' => $request_data,
+            'headers' => $headers,
+            'url' => $url,
+            'user_id' => auth()->id()
+        ]);
+
+        $response = Http::
+        withOptions(['verify' => false,])
+            ->withHeaders($headers)
+            ->get($url, $request_data);
+
+
+        ray($response);
+        ray($response->json());
+
+        $log->update([
+            'output' => $response->json(),
+            'status_code' => $response->getStatusCode()
+        ]);
+
+        return $response->json();
+    }
+
+    public function process($ic_no)
+    {
+
+    }
+
+
+}

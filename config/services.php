@@ -44,6 +44,10 @@ return [
         'email' => env('lpm_svk_email'),
         'password' => env('lpm_svk_password'),
     ],
+    'lpm_apkv' => [
+        'url' => env('lpm_apkv_url'),
+        'bearer' => env('lpm_apkv_bearer'),
+    ],
     'kpm' => [
         'api_key' => env('kpm_key'),
         'url' => env('kpm_url'),
@@ -53,6 +57,27 @@ return [
         'url' => env('kpt_esis_url'),
         'username' => env('kpt_esis_username'),
         'password' => env('kpt_esis_password'),
+    ],
+    
+    'kpt_skpg' => [
+        'url' => env('kpt_skpg_url'),
+        'username' => env('kpt_skpg_username'),
+        'password' => env('kpt_skpg_password'),
+    ],
+
+    'mygdx' => [
+        'subsystem_code' => env('MYGDX_SUBSYSTEM_CODE', 'ESPP'),
+    ],
+    
+    'jpn' => [
+        'api_key' => env('jpn_key'),
+        'url' => env('jpn_url'),
+    ],
+
+    'iscaf' => [
+        'url' => env('ISCAF_URL', 'http://10.29.59.123/api/v1'),
+        'api_key' => env('ISCAF_API_KEY'),
+        'status_method' => env('ISCAF_STATUS_METHOD', 'POST'),
     ],
 
 ];

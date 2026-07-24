@@ -65,7 +65,7 @@ return [
         'iscaf_db' => [
             'driver' => 'mysql',
             'url' => env('DB_URL'),
-            'host' => env('DB_HOST', '127.0.0.1'),
+            'host' => env('DB_HOST_iscaf', '127.0.0.1'),
             'port' => env('DB_PORT_iscaf', '3306'),
             'database' => env('DB_DATABASE_iscaf', 'laravel'),
             'username' => env('DB_USERNAME_iscaf', 'root'),

@@ -21,3 +21,15 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# macOS metadata
+.DS_Store
+._*
+
+# Certificates and private keys
+resources/MyGDX/*.key
+resources/MyGDX/*.crt
+*.pem
+*.p12
+*.pfx
+resources/docs/iscaf-api.postman_collection.json

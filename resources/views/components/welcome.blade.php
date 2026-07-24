@@ -21,7 +21,15 @@
 
     <livewire:k-p-t-form />
 
+    <livewire:k-p-t-s-k-p-g-form />
+
     <livewire:iscaf-form />
+
+    <livewire:muet-form />
+    
+    <livewire:l-p-m-a-p-k-v-form />
+    
+    <livewire:j-p-n-form />
 </div>
 
 {{--<div class="bg-gray-200 dark:bg-gray-800 bg-opacity-25 grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 p-6 lg:p-8">

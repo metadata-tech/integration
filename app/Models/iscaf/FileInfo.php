@@ -4,7 +4,7 @@ namespace App\Models\iscaf;
 
 use App\Enum\File\FileStatus;
 use App\Enum\File\RegStatus;
-use App\Models\File\App;
+use App\Models\iscaf\App;
 use App\Models\File\Document;
 use App\Models\iscaf\DocumentNumberHistory;
 use App\Models\File\FileHistory;
