@@ -58,7 +58,7 @@ return [
         'username' => env('kpt_esis_username'),
         'password' => env('kpt_esis_password'),
     ],
-    
+
     'kpt_skpg' => [
         'url' => env('kpt_skpg_url'),
         'username' => env('kpt_skpg_username'),
@@ -66,18 +66,16 @@ return [
     ],
 
     'mygdx' => [
-        'subsystem_code' => env('MYGDX_SUBSYSTEM_CODE', 'ESPP'),
+        'subsystem_code' => env('MYGDX_SUBSYSTEM_CODE', 'ESPP_STG'),
+    ],
+    
+    'mqr' => [
+        'url' => env('MQR_URL'),
     ],
     
     'jpn' => [
         'api_key' => env('jpn_key'),
         'url' => env('jpn_url'),
-    ],
-
-    'iscaf' => [
-        'url' => env('ISCAF_URL', 'http://10.29.59.123/api/v1'),
-        'api_key' => env('ISCAF_API_KEY'),
-        'status_method' => env('ISCAF_STATUS_METHOD', 'POST'),
     ],
 
 ];

@@ -1,5 +1,6 @@
 <?php
 use App\Http\Controllers\Admin\UserTokenController;
+use App\Http\Controllers\MQRReportController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -15,9 +16,14 @@ Route::middleware([
         return view('dashboard');
     })->name('dashboard');
 
+    Route::get('/mqr/reports/{run}/{type}', MQRReportController::class)
+        ->where('type', 'all|success|failure')
+        ->name('mqr.reports.download');
+
     Route::get('/log_api', [\App\Http\Controllers\LogAPIController::class, 'index'])->name("logapi.index");
 
-
+    Route::get('hassantest', \App\Livewire\IscafForm::class)->name("hassantest");
+    Route::get('iscaf_search', \App\Livewire\IscafSearch::class)->name("iscaf_search");
 
     /**
      ** Users Management Page
@@ -48,4 +54,3 @@ Route::middleware([
     });
 
 });
-
