@@ -78,4 +78,10 @@ return [
         'url' => env('jpn_url'),
     ],
 
+    'iscaf' => [
+        'url' => env('ISCAF_URL', 'http://10.29.59.123/api/v1'),
+        'api_key' => env('ISCAF_API_KEY'),
+        'status_method' => env('ISCAF_STATUS_METHOD', 'POST'),
+    ],
+
 ];
