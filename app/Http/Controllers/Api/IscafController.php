@@ -24,9 +24,13 @@ class IscafController extends BaseController
             'nt' => 'nullable|integer|in:0,1',
         ]);
 
-        return response()->json(
-            $this->service->checkStatus($validated['no_kp'], $validated['cawangan'], $validated['nt'] ?? null)
+        $result = $this->service->checkStatus(
+            $validated['no_kp'],
+            $validated['cawangan'],
+            $validated['nt'] ?? null
         );
+
+        return response()->json($result, $this->proxyStatusCode());
     }
 
     /**
@@ -46,14 +50,14 @@ class IscafController extends BaseController
             'data.*.nt' => 'nullable|integer|in:0,1',
         ]);
 
-        return response()->json(
-            $this->service->daftar(
-                $validated['mykad_no'],
-                $validated['cawangan'],
-                $validated['no_pemerolehan'] ?? null,
-                $validated['data']
-            )
+        $result = $this->service->daftar(
+            $validated['mykad_no'],
+            $validated['cawangan'],
+            $validated['no_pemerolehan'] ?? null,
+            $validated['data']
         );
+
+        return response()->json($result, $this->proxyStatusCode());
     }
 
     /**
@@ -67,9 +71,13 @@ class IscafController extends BaseController
             'nt' => 'nullable|integer|in:0,1',
         ]);
 
-        return response()->json(
-            $this->service->getInfo($validated['no_kp'], $validated['cawangan'], $validated['nt'] ?? null)
+        $result = $this->service->getInfo(
+            $validated['no_kp'],
+            $validated['cawangan'],
+            $validated['nt'] ?? null
         );
+
+        return response()->json($result, $this->proxyStatusCode());
     }
 
     /**
@@ -85,14 +93,29 @@ class IscafController extends BaseController
             'nt' => 'nullable|integer|in:0,1',
         ]);
 
-        return response()->json(
-            $this->service->kemasKini(
-                $validated['mykad_no'],
-                $validated['cawangan'],
-                $validated['ic_no'],
-                $validated['aktiviti'],
-                $validated['nt'] ?? null
-            )
+        $result = $this->service->kemasKini(
+            $validated['mykad_no'],
+            $validated['cawangan'],
+            $validated['ic_no'],
+            $validated['aktiviti'],
+            $validated['nt'] ?? null
         );
+
+        return response()->json($result, $this->proxyStatusCode());
+    }
+
+    /**
+     * Forward meaningful upstream transport errors (e.g. 429).
+     * Keep 200 for normal iSCAF business responses (including "record not found").
+     */
+    private function proxyStatusCode(): int
+    {
+        $upstream = $this->service->getLastHttpStatus();
+
+        if ($upstream === 429 || $upstream >= 500) {
+            return $upstream;
+        }
+
+        return 200;
     }
 }

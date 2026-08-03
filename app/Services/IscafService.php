@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\APILog;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 
@@ -11,6 +13,11 @@ class IscafService
     protected string $baseUrl;
     protected string $apiKey;
     protected string $statusMethod;
+
+    /**
+     * Last upstream HTTP status from the most recent call.
+     */
+    protected int $lastHttpStatus = 200;
 
     /**
      * Branch ID (integer) to cawangan code mapping.
@@ -26,6 +33,11 @@ class IscafService
         $this->baseUrl = rtrim(config('services.iscaf.url'), '/');
         $this->apiKey = config('services.iscaf.api_key');
         $this->statusMethod = strtoupper(config('services.iscaf.status_method', 'POST'));
+    }
+
+    public function getLastHttpStatus(): int
+    {
+        return $this->lastHttpStatus;
     }
 
     /**
@@ -47,30 +59,24 @@ class IscafService
     public function checkStatus(string $ic_no, string $cawangan, ?int $nt = null): array
     {
         $url = "{$this->baseUrl}/status/{$ic_no}/{$cawangan}";
-        
-        // Append nt jika parameter disertakan (URL Param)
+
         if ($nt !== null) {
             $url .= "/{$nt}";
         }
 
         $log = $this->logRequest($this->statusMethod, $url, [
-            'ic_no' => $ic_no, 
+            'ic_no' => $ic_no,
             'cawangan' => $cawangan,
-            'nt' => $nt
+            'nt' => $nt,
         ]);
 
-        $client = Http::withOptions(['verify' => false])
-            ->withHeaders(['X-Api-Key' => $this->apiKey]);
+        $client = $this->client();
 
         $response = $this->statusMethod === 'GET'
             ? $client->get($url)
             : $client->post($url);
 
-        ray($response->json())->blue();
-
-        $this->logResponse($log, $response);
-
-        return $response->json() ?? ['status' => 'error', 'message' => 'No response from iSCAF'];
+        return $this->finalize($log, $response);
     }
 
     /**
@@ -96,24 +102,17 @@ class IscafService
             'data' => $sanitizedData,
         ];
 
-        // Memasukkan no_pemerolehan jika wujud
         if ($no_pemerolehan) {
             $payload['no_pemerolehan'] = $no_pemerolehan;
         }
 
         $log = $this->logRequest('POST', $url, $payload);
 
-        $response = Http::withOptions(['verify' => false])
-            ->acceptJson()
+        $response = $this->client()
             ->asJson()
-            ->withHeaders(['X-Api-Key' => $this->apiKey])
             ->post($url, $payload);
 
-        ray($response->json())->blue();
-
-        $this->logResponse($log, $response);
-
-        return $response->json() ?? ['status' => 'error', 'message' => 'No response from iSCAF'];
+        return $this->finalize($log, $response);
     }
 
     /**
@@ -123,27 +122,20 @@ class IscafService
     public function getInfo(string $ic_no, string $cawangan, ?int $nt = null): array
     {
         $url = "{$this->baseUrl}/informasi/{$ic_no}/{$cawangan}";
-        
-        // Append nt jika parameter disertakan (URL Param)
+
         if ($nt !== null) {
             $url .= "/{$nt}";
         }
 
         $log = $this->logRequest('GET', $url, [
-            'ic_no' => $ic_no, 
+            'ic_no' => $ic_no,
             'cawangan' => $cawangan,
-            'nt' => $nt
+            'nt' => $nt,
         ]);
 
-        $response = Http::withOptions(['verify' => false])
-            ->withHeaders(['X-Api-Key' => $this->apiKey])
-            ->get($url);
+        $response = $this->client()->get($url);
 
-        ray($response->json())->blue();
-
-        $this->logResponse($log, $response);
-
-        return $response->json() ?? ['status' => 'error', 'message' => 'No response from iSCAF'];
+        return $this->finalize($log, $response);
     }
 
     /**
@@ -161,22 +153,81 @@ class IscafService
             'aktiviti' => $aktiviti,
         ];
 
-        // Tambah nt di dalam payload body jika disertakan
         if ($nt !== null) {
             $payload['nt'] = $nt;
         }
 
         $log = $this->logRequest('POST', $url, $payload);
 
-        $response = Http::withOptions(['verify' => false])
-            ->withHeaders(['X-Api-Key' => $this->apiKey])
+        $response = $this->client()
+            ->asJson()
             ->post($url, $payload);
 
-        ray($response->json())->blue();
+        return $this->finalize($log, $response);
+    }
 
-        $this->logResponse($log, $response);
+    protected function client(): PendingRequest
+    {
+        return Http::withOptions(['verify' => false])
+            ->acceptJson()
+            ->withHeaders(['X-Api-Key' => $this->apiKey]);
+    }
 
-        return $response->json() ?? ['status' => 'error', 'message' => 'No response from iSCAF'];
+    protected function finalize(APILog $log, Response $response): array
+    {
+        $this->lastHttpStatus = $response->status();
+        $result = $this->normalizeResponse($response);
+
+        if (function_exists('ray')) {
+            ray($result)->blue();
+        }
+
+        $this->logResponse($log, $response, $result);
+
+        return $result;
+    }
+
+    /**
+     * Normalize upstream body into the iSCAF {status, message, data?} shape.
+     * Handles JSON success/error, throttle JSON, and HTML 429 pages (debugbar).
+     */
+    protected function normalizeResponse(Response $response): array
+    {
+        $json = $response->json();
+
+        if (is_array($json) && (isset($json['status']) || isset($json['data']))) {
+            return $json;
+        }
+
+        if ($response->status() === 429 || $this->bodyLooksThrottled($response)) {
+            return [
+                'status' => 'error',
+                'message' => 'Too Many Attempts. Please retry later.',
+            ];
+        }
+
+        if (is_array($json) && isset($json['message'])) {
+            return [
+                'status' => 'error',
+                'message' => $json['message'],
+            ];
+        }
+
+        return [
+            'status' => 'error',
+            'message' => 'No response from iSCAF',
+        ];
+    }
+
+    protected function bodyLooksThrottled(Response $response): bool
+    {
+        $body = $response->body();
+
+        return $body !== '' && (
+            str_contains($body, 'Too Many Attempts')
+            || str_contains($body, 'Too Many Requests')
+            || str_contains($body, 'ThrottleRequestsException')
+        );
     }
 
     protected function logRequest(string $method, string $url, array $input): APILog
@@ -190,10 +241,10 @@ class IscafService
         ]);
     }
 
-    protected function logResponse(APILog $log, $response): void
+    protected function logResponse(APILog $log, Response $response, array $normalized): void
     {
         $log->update([
-            'output' => $response->json(),
+            'output' => $normalized,
             'status_code' => $response->status(),
         ]);
     }
