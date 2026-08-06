@@ -19,11 +19,13 @@
         <!-- Styles -->
         @livewireStyles
     </head>
-    <body>
-        <div class="font-sans text-gray-900 antialiased">
+    <body class="min-h-screen bg-washed-100 bg-cover bg-center bg-no-repeat" style="background-image: url('{{ asset('img/bg.png') }}');">
+        <div class="flex min-h-screen flex-col font-sans text-gray-900 antialiased">
             <x-masthead />
 
-            {{ $slot }}
+            <div class="flex flex-1 flex-col">
+                {{ $slot }}
+            </div>
         </div>
 
         @livewireScripts
