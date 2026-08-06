@@ -39,6 +39,11 @@
             </p>
         </section>
 
+        {{-- Integration map --}}
+        <section>
+            @livewire('integration-map')
+        </section>
+
         {{-- Integration cards --}}
         <section>
             <h3 class="font-heading text-base font-semibold text-gray-900">Perkhidmatan Integrasi</h3>

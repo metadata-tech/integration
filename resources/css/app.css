@@ -68,3 +68,37 @@
         @apply myds-badge border-warning-200 bg-warning-50 text-warning-700;
     }
 }
+
+/* Integration map (dashboard) — kept outside layers so keyframes survive purging */
+@keyframes cable-flow {
+    to {
+        stroke-dashoffset: -28;
+    }
+}
+
+.cable-flow {
+    stroke-dasharray: 7 7;
+    animation: cable-flow 0.9s linear infinite;
+}
+
+@keyframes cable-pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.3;
+    }
+}
+
+.cable-pulse {
+    animation: cable-pulse 1.5s ease-in-out infinite;
+}
+
+.map-node .map-node-box {
+    transition: stroke 0.15s ease, filter 0.15s ease;
+}
+
+.map-node:hover .map-node-box {
+    stroke: #2563EB;
+    filter: drop-shadow(0 2px 6px rgb(0 0 0 / 0.08));
+}
