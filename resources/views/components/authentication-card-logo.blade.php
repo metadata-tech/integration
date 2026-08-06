@@ -5,6 +5,6 @@
     </span>
     <span class="text-center">
         <span class="block font-heading text-lg font-semibold text-gray-900">{{ config('app.name', 'MySPP Integration') }}</span>
-        <span class="block text-sm text-gray-500">Suruhanjaya Perkhidmatan Pelajaran</span>
+        <span class="block text-sm text-gray-500">Suruhanjaya Perkhidmatan Pendidikan</span>
     </span>
 </a>

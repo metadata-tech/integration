@@ -15,7 +15,7 @@
             <x-application-mark class="block h-9 w-auto" />
             <span class="hidden sm:block">
                 <span class="block font-heading text-sm font-semibold leading-tight text-gray-900">{{ config('app.name', 'MySPP Integration') }}</span>
-                <span class="block text-[11px] leading-tight text-gray-500">Suruhanjaya Perkhidmatan Pelajaran</span>
+                <span class="block text-[11px] leading-tight text-gray-500">Suruhanjaya Perkhidmatan Pendidikan</span>
             </span>
         </a>
 

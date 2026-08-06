@@ -8,6 +8,6 @@
     </div>
 
     <p class="mt-6 pb-6 text-xs text-gray-400">
-        &copy; {{ date('Y') }} Suruhanjaya Perkhidmatan Pelajaran (SPP)
+        &copy; {{ date('Y') }} Suruhanjaya Perkhidmatan Pendidikan (SPP)
     </p>
 </div>

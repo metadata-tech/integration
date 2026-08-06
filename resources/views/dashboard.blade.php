@@ -4,7 +4,7 @@
             Utama
         </h2>
         <p class="mt-0.5 text-sm text-gray-500">
-            Gerbang integrasi API Suruhanjaya Perkhidmatan Pelajaran dengan agensi luar.
+            Gerbang integrasi API Suruhanjaya Perkhidmatan Pendidikan dengan agensi luar.
         </p>
     </x-slot>
 

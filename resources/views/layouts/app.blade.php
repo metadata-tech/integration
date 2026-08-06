@@ -85,7 +85,7 @@
 
                     <footer class="border-t border-outline-200 bg-white">
                         <div class="flex flex-col gap-1 px-4 py-4 text-xs text-gray-500 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-                            <p>&copy; {{ date('Y') }} Suruhanjaya Perkhidmatan Pelajaran (SPP)</p>
+                            <p>&copy; {{ date('Y') }} Suruhanjaya Perkhidmatan Pendidikan (SPP)</p>
                             <p>{{ config('app.name', 'MySPP Integration') }}</p>
                         </div>
                     </footer>
