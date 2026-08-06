@@ -5,3 +5,66 @@
 [x-cloak] {
     display: none;
 }
+
+@layer base {
+    body {
+        @apply bg-washed-100 text-gray-700 antialiased;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+        @apply font-heading text-gray-900;
+    }
+}
+
+@layer components {
+    /* MYDS-style content card */
+    .myds-card {
+        @apply bg-white border border-outline-200 rounded-xl shadow-card;
+    }
+
+    /* MYDS-style table */
+    .myds-table {
+        @apply min-w-full divide-y divide-outline-200 text-sm;
+    }
+
+    .myds-table thead {
+        @apply bg-washed-100;
+    }
+
+    .myds-table thead th {
+        @apply px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500;
+    }
+
+    .myds-table tbody {
+        @apply divide-y divide-outline-200 bg-white;
+    }
+
+    .myds-table tbody td {
+        @apply px-4 py-3 align-middle text-gray-700;
+    }
+
+    /* MYDS-style badge/pill */
+    .myds-badge {
+        @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium;
+    }
+
+    .myds-badge-gray {
+        @apply myds-badge border-outline-200 bg-washed-100 text-gray-600;
+    }
+
+    .myds-badge-primary {
+        @apply myds-badge border-primary-200 bg-primary-50 text-primary-700;
+    }
+
+    .myds-badge-success {
+        @apply myds-badge border-success-200 bg-success-50 text-success-700;
+    }
+
+    .myds-badge-danger {
+        @apply myds-badge border-danger-200 bg-danger-50 text-danger-700;
+    }
+
+    .myds-badge-warning {
+        @apply myds-badge border-warning-200 bg-warning-50 text-warning-700;
+    }
+}

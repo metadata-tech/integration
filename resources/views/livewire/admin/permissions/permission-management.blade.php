@@ -1,61 +1,58 @@
 <div>
     <!-- Search and Add Permission Button -->
-    <div class="mb-4 flex justify-between items-center">
-        <div class="flex-1 max-w-sm">
-            <input
+    <div class="mb-4 flex items-center justify-between gap-4">
+        <div class="max-w-sm flex-1">
+            <x-input
                 type="text"
                 wire:model.live="search"
-                class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                placeholder="Search permissions..."
-            >
+                class="w-full"
+                placeholder="Cari kebenaran..."
+            />
         </div>
-        <button
-            wire:click="openModal('create')"
-            class="ml-4 inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 focus:outline-none focus:border-indigo-700 focus:ring ring-indigo-300 disabled:opacity-25 transition ease-in-out duration-150"
-        >
-            Add Permission
-        </button>
+        <x-button type="button" wire:click="openModal('create')">
+            Tambah Kebenaran
+        </x-button>
     </div>
 
     <!-- Permissions Table -->
-    <div class="overflow-x-auto bg-white rounded-lg shadow">
-        <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
+    <div class="myds-card overflow-x-auto">
+        <table class="myds-table">
+            <thead>
             <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Used By Roles</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                <th>Nama</th>
+                <th>Digunakan Oleh Peranan</th>
+                <th>Tindakan</th>
             </tr>
             </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
+            <tbody>
             @foreach($permissions as $permission)
-                <tr>
-                    <td class="px-6 py-4 whitespace-nowrap">{{ $permission->name }}</td>
-                    <td class="px-6 py-4">
+                <tr class="hover:bg-washed-100/60">
+                    <td class="whitespace-nowrap font-medium text-gray-900">{{ $permission->name }}</td>
+                    <td>
                         <div class="flex flex-wrap gap-1">
                             @foreach($permission->roles as $role)
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                        {{ $role->name }}
-                                    </span>
+                                <span class="myds-badge-primary">{{ $role->name }}</span>
                             @endforeach
                         </div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm">
-                        <button
-                            wire:click="openModal('edit', {{ $permission->id }})"
-                            class="text-indigo-600 hover:text-indigo-900 mr-3"
-                        >
-                            Edit
-                        </button>
-                        @if($permission->roles->isEmpty())
+                    <td class="whitespace-nowrap text-sm">
+                        <span class="flex items-center gap-3">
                             <button
-                                wire:click="deletePermission({{ $permission->id }})"
-                                wire:confirm="Are you sure you want to delete this permission?"
-                                class="text-red-600 hover:text-red-900"
+                                wire:click="openModal('edit', {{ $permission->id }})"
+                                class="font-medium text-primary-600 hover:text-primary-700 hover:underline"
                             >
-                                Delete
+                                Edit
                             </button>
-                        @endif
+                            @if($permission->roles->isEmpty())
+                                <button
+                                    wire:click="deletePermission({{ $permission->id }})"
+                                    wire:confirm="Are you sure you want to delete this permission?"
+                                    class="font-medium text-danger-600 hover:text-danger-700 hover:underline"
+                                >
+                                    Padam
+                                </button>
+                            @endif
+                        </span>
                     </td>
                 </tr>
             @endforeach
@@ -70,10 +67,10 @@
 
     <!-- Modal -->
     @if($isModalOpen)
-        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity z-50">
+        <div class="fixed inset-0 z-50 bg-gray-900/50 transition-opacity">
             <div class="fixed inset-0 z-10 overflow-y-auto">
                 <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-                    <div class="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+                    <div class="relative transform overflow-hidden rounded-xl bg-white px-4 pb-4 pt-5 text-left shadow-context-menu transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
                         <div class="absolute right-0 top-0 pr-4 pt-4">
                             <button
                                 wire:click="closeModal"
@@ -87,42 +84,27 @@
                         </div>
 
                         <div class="sm:flex sm:items-start">
-                            <div class="mt-3 text-center sm:mt-0 sm:text-left w-full">
-                                <h3 class="text-lg font-medium leading-6 text-gray-900">
-                                    {{ $modalMode === 'create' ? 'Add New Permission' : 'Edit Permission' }}
+                            <div class="mt-3 w-full text-center sm:mt-0 sm:text-left">
+                                <h3 class="font-heading text-lg font-semibold leading-6 text-gray-900">
+                                    {{ $modalMode === 'create' ? 'Tambah Kebenaran Baharu' : 'Kemas Kini Kebenaran' }}
                                 </h3>
 
-                                <form wire:submit="create" class="mt-4">
+                                <form wire:submit="create" class="mt-4 text-start">
                                     <div>
-                                        <label for="name" class="block text-sm font-medium text-gray-700">Permission Name</label>
-                                        <div class="mt-1">
-                                            <input
-                                                type="text"
-                                                id="name"
-                                                wire:model="name"
-                                                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                                placeholder="Enter permission name"
-                                            >
-                                        </div>
+                                        <x-label for="name" value="Nama Kebenaran" />
+                                        <x-input type="text" id="name" wire:model="name" class="mt-1 block w-full" placeholder="Masukkan nama kebenaran" />
                                         @error('name')
-                                        <span class="text-red-500 text-xs mt-1">{{ $message }}</span>
+                                        <span class="mt-1 text-xs text-danger-600">{{ $message }}</span>
                                         @enderror
                                     </div>
 
-                                    <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
-                                        <button
-                                            type="submit"
-                                            class="inline-flex w-full justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm"
-                                        >
-                                            {{ $modalMode === 'create' ? 'Create' : 'Update' }}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            wire:click="closeModal"
-                                            class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:mt-0 sm:w-auto sm:text-sm"
-                                        >
-                                            Cancel
-                                        </button>
+                                    <div class="mt-5 gap-2 sm:mt-4 sm:flex sm:flex-row-reverse">
+                                        <x-button type="submit" class="w-full sm:w-auto">
+                                            {{ $modalMode === 'create' ? 'Simpan' : 'Kemas Kini' }}
+                                        </x-button>
+                                        <x-secondary-button type="button" wire:click="closeModal" class="mt-3 w-full sm:mt-0 sm:w-auto">
+                                            Batal
+                                        </x-secondary-button>
                                     </div>
                                 </form>
                             </div>

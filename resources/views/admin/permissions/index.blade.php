@@ -1,16 +1,14 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
-            {{ __('Permission Management') }}
+        <h2 class="font-heading text-lg font-semibold text-gray-900">
+            {{ __('Pengurusan Kebenaran') }}
         </h2>
+        <p class="mt-0.5 text-sm text-gray-500">
+            Urus senarai kebenaran sistem.
+        </p>
     </x-slot>
 
-    <div class="py-12">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-            <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-xl sm:rounded-lg p-4">
-                <livewire:admin.permissions.permission-management />
-            </div>
-        </div>
+    <div class="px-4 py-6 sm:px-6 lg:px-8">
+        <livewire:admin.permissions.permission-management />
     </div>
 </x-app-layout>
-

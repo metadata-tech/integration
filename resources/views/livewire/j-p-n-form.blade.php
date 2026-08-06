@@ -1,36 +1,19 @@
 <div>
-    {{-- Knowing others is intelligence; knowing yourself is true wisdom. --}}
-
-    <h1 class="mt-8 text-2xl font-medium text-gray-900 dark:text-white">
-        JPN MyIdentity
-    </h1>
-
-    <form wire:submit="process">
-
-        <!-- NO KP -->
-        <div class="col-span-6 sm:col-span-4">
-            <x-label for="name" value="{{ __('NO KP') }}" />
-            <x-input id="name" type="text" class="mt-1 block w-full" wire:model="no_kp" required />
-            <x-input-error for="name" class="mt-2" />
+    <form wire:submit="process" class="space-y-4">
+        <div>
+            <x-label for="jpn_no_kp" value="{{ __('No KP') }}" />
+            <x-input id="jpn_no_kp" type="text" class="mt-1 block w-full" wire:model="no_kp" required />
+            <x-input-error for="no_kp" class="mt-2" />
         </div>
 
-        <br />
-        <x-button>
-            Call JPN MyIdentity API
-        </x-button>
-
-        @if($this->result != null)
-            <h1 class="mt-8 text-2xl font-medium text-gray-900 dark:text-white">
-                Result JPN
-            </h1>
-
-            {{-- Gunakan key 'response' sebab itu yang ada dalam data JPN anda --}}
-            @if(isset($this->result['response']))
-                {{-- Kalau nak dump untuk tengok key apa yang ada --}}
-                @dump($this->result['response'])
-            @endif
-        @endif
-
-
+        <div class="pt-2">
+            <x-button wire:loading.attr="disabled">
+                Semak JPN MyIdentity
+            </x-button>
+        </div>
     </form>
+
+    @if ($this->result != null)
+        <x-result-panel :result="$this->result['response'] ?? $this->result" title="Hasil JPN" />
+    @endif
 </div>

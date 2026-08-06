@@ -1,63 +1,62 @@
 <div>
     <!-- Search and Add User Button -->
-    <div class="mb-4 flex justify-between items-center">
-        <div class="flex-1 max-w-sm">
-            <input
+    <div class="mb-4 flex items-center justify-between gap-4">
+        <div class="max-w-sm flex-1">
+            <x-input
                 type="text"
                 wire:model.live="search"
-                class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                placeholder="Search users..."
-            >
+                class="w-full"
+                placeholder="Cari pengguna..."
+            />
         </div>
-        <button
-            wire:click="openModal('create')"
-            class="ml-4 inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 focus:outline-none focus:border-indigo-700 focus:ring ring-indigo-300 disabled:opacity-25 transition ease-in-out duration-150"
-        >
-            Add User
-        </button>
+        <x-button type="button" wire:click="openModal('create')">
+            Tambah Pengguna
+        </x-button>
     </div>
 
     <!-- Users Table -->
-    <div class="overflow-x-auto bg-white rounded-lg shadow">
-        <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
+    <div class="myds-card overflow-x-auto">
+        <table class="myds-table">
+            <thead>
             <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Roles</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                <th>Nama</th>
+                <th>E-mel</th>
+                <th>Peranan</th>
+                <th>Tindakan</th>
             </tr>
             </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
+            <tbody>
             @foreach($users as $user)
-                <tr>
-                    <td class="px-6 py-4 whitespace-nowrap">{{ $user->name }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">{{ $user->email }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        @foreach($user->roles as $role)
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 mr-1">
-                                    {{ $role->name }}
-                                </span>
-                        @endforeach
+                <tr class="hover:bg-washed-100/60">
+                    <td class="whitespace-nowrap font-medium text-gray-900">{{ $user->name }}</td>
+                    <td class="whitespace-nowrap">{{ $user->email }}</td>
+                    <td class="whitespace-nowrap">
+                        <span class="flex flex-wrap gap-1">
+                            @foreach($user->roles as $role)
+                                <span class="myds-badge-gray">{{ $role->name }}</span>
+                            @endforeach
+                        </span>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm">
-                        <button
-                            wire:click="openModal('edit', {{ $user->id }})"
-                            class="text-indigo-600 hover:text-indigo-900 mr-3"
-                        >
-                            Edit
-                        </button>
-                        <button
-                            wire:click="deleteUser({{ $user->id }})"
-                            wire:confirm="Are you sure you want to delete this user?"
-                            class="text-red-600 hover:text-red-900"
-                        >
-                            Delete
-                        </button>
-
-                        <x-nav-link target="_blank" href="{{ route('admin.user-tokens.index', $user) }}" :active="request()->routeIs('admin.user-tokens.index')">
-                            {{ __('API Token Management') }}
-                        </x-nav-link>
+                    <td class="whitespace-nowrap text-sm">
+                        <span class="flex items-center gap-3">
+                            <button
+                                wire:click="openModal('edit', {{ $user->id }})"
+                                class="font-medium text-primary-600 hover:text-primary-700 hover:underline"
+                            >
+                                Edit
+                            </button>
+                            <button
+                                wire:click="deleteUser({{ $user->id }})"
+                                wire:confirm="Are you sure you want to delete this user?"
+                                class="font-medium text-danger-600 hover:text-danger-700 hover:underline"
+                            >
+                                Padam
+                            </button>
+                            <a target="_blank" href="{{ route('admin.user-tokens.index', $user) }}"
+                               class="font-medium text-gray-500 hover:text-gray-700 hover:underline">
+                                {{ __('Token API') }}
+                            </a>
+                        </span>
                     </td>
                 </tr>
             @endforeach
@@ -72,10 +71,10 @@
 
     <!-- Modal -->
     @if($isModalOpen)
-        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity z-50">
+        <div class="fixed inset-0 z-50 bg-gray-900/50 transition-opacity">
             <div class="fixed inset-0 z-10 overflow-y-auto">
                 <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-                    <div class="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+                    <div class="relative transform overflow-hidden rounded-xl bg-white px-4 pb-4 pt-5 text-left shadow-context-menu transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
                         <div class="absolute right-0 top-0 pr-4 pt-4">
                             <button
                                 wire:click="closeModal"
@@ -89,90 +88,64 @@
                         </div>
 
                         <div class="sm:flex sm:items-start">
-                            <div class="mt-3 text-center sm:mt-0 sm:text-left w-full">
-                                <h3 class="text-lg font-medium leading-6 text-gray-900">
-                                    {{ $modalMode === 'create' ? 'Add New User' : 'Edit User' }}
+                            <div class="mt-3 w-full text-center sm:mt-0 sm:text-left">
+                                <h3 class="font-heading text-lg font-semibold leading-6 text-gray-900">
+                                    {{ $modalMode === 'create' ? 'Tambah Pengguna Baharu' : 'Kemas Kini Pengguna' }}
                                 </h3>
 
-                                <form wire:submit="create" class="mt-4 space-y-4">
+                                <form wire:submit="create" class="mt-4 space-y-4 text-start">
                                     <div>
-                                        <label for="name" class="block text-sm font-medium text-gray-700">Name</label>
-                                        <input
-                                            type="text"
-                                            id="name"
-                                            wire:model="name"
-                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                        >
+                                        <x-label for="name" value="Nama" />
+                                        <x-input type="text" id="name" wire:model="name" class="mt-1 block w-full" />
                                         @error('name')
-                                        <span class="text-red-500 text-xs mt-1">{{ $message }}</span>
+                                        <span class="mt-1 text-xs text-danger-600">{{ $message }}</span>
                                         @enderror
                                     </div>
 
                                     <div>
-                                        <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
-                                        <input
-                                            type="email"
-                                            id="email"
-                                            wire:model="email"
-                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                        >
+                                        <x-label for="email" value="E-mel" />
+                                        <x-input type="email" id="email" wire:model="email" class="mt-1 block w-full" />
                                         @error('email')
-                                        <span class="text-red-500 text-xs mt-1">{{ $message }}</span>
+                                        <span class="mt-1 text-xs text-danger-600">{{ $message }}</span>
                                         @enderror
                                     </div>
 
                                     <div>
-                                        <label for="password" class="block text-sm font-medium text-gray-700">
-                                            Password {{ $modalMode === 'edit' ? '(Leave blank to keep current)' : '' }}
-                                        </label>
-                                        <input
-                                            type="password"
-                                            id="password"
-                                            wire:model="password"
-                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                        >
+                                        <x-label for="password">
+                                            Kata Laluan {{ $modalMode === 'edit' ? '(Biarkan kosong untuk kekalkan)' : '' }}
+                                        </x-label>
+                                        <x-input type="password" id="password" wire:model="password" class="mt-1 block w-full" />
                                         @error('password')
-                                        <span class="text-red-500 text-xs mt-1">{{ $message }}</span>
+                                        <span class="mt-1 text-xs text-danger-600">{{ $message }}</span>
                                         @enderror
                                     </div>
 
                                     <div>
-                                        <label class="block text-sm font-medium text-gray-700">Roles</label>
+                                        <x-label value="Peranan" />
                                         <div class="mt-2 space-y-2">
                                             @foreach($roles as $role)
-                                                <div class="flex items-center">
-                                                    <input
-                                                        type="checkbox"
+                                                <label for="role_{{ $role->id }}" class="flex items-center gap-2 text-sm text-gray-700">
+                                                    <x-checkbox
                                                         id="role_{{ $role->id }}"
                                                         value="{{ $role->name }}"
                                                         wire:model="selectedRoles"
-                                                        class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                                    >
-                                                    <label for="role_{{ $role->id }}" class="ml-2 text-sm text-gray-700">
-                                                        {{ $role->name }}
-                                                    </label>
-                                                </div>
+                                                    />
+                                                    {{ $role->name }}
+                                                </label>
                                             @endforeach
                                         </div>
                                         @error('selectedRoles')
-                                        <span class="text-red-500 text-xs mt-1">{{ $message }}</span>
+                                        <span class="mt-1 text-xs text-danger-600">{{ $message }}</span>
                                         @enderror
                                     </div>
 
-                                    <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
-                                        <button
-                                            type="submit"
-                                            class="inline-flex w-full justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm"
-                                        >
-                                            {{ $modalMode === 'create' ? 'Create' : 'Update' }}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            wire:click="closeModal"
-                                            class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:mt-0 sm:w-auto sm:text-sm"
-                                        >
-                                            Cancel
-                                        </button>
+                                    <div class="mt-5 gap-2 sm:mt-4 sm:flex sm:flex-row-reverse">
+                                        <x-button type="submit" class="w-full sm:w-auto">
+                                            {{ $modalMode === 'create' ? 'Simpan' : 'Kemas Kini' }}
+                                        </x-button>
+                                        <x-secondary-button type="button" wire:click="closeModal" class="mt-3 w-full sm:mt-0 sm:w-auto">
+                                            Batal
+                                        </x-secondary-button>
                                     </div>
                                 </form>
                             </div>

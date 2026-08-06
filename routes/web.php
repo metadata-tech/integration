@@ -4,7 +4,7 @@ use App\Http\Controllers\MQRReportController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return view('welcome');
+    return redirect(auth()->check() ? route('dashboard') : route('login'));
 });
 
 Route::middleware([
@@ -13,12 +13,31 @@ Route::middleware([
     'verified',
 ])->group(function () {
     Route::get('/dashboard', function () {
-        return view('dashboard');
+        return view('dashboard', [
+            'stats' => [
+                'today' => \App\Models\APILog::whereDate('created_at', today())->count(),
+                'errors_today' => \App\Models\APILog::whereDate('created_at', today())->where('status_code', '>=', 400)->count(),
+                'total' => \App\Models\APILog::count(),
+                'last' => \App\Models\APILog::latest('created_at')->value('created_at'),
+            ],
+        ]);
     })->name('dashboard');
 
     Route::get('/mqr/reports/{run}/{type}', MQRReportController::class)
         ->where('type', 'all|success|failure')
         ->name('mqr.reports.download');
+
+    /**
+     ** Integration Pages
+     */
+    Route::prefix('integrasi')->name('integrasi.')->group(function () {
+        foreach (config('integrations') as $slug => $integration) {
+            Route::view("/{$slug}", 'integrasi.show', [
+                'slug' => $slug,
+                'integration' => $integration,
+            ])->name($slug);
+        }
+    });
 
     Route::get('/log_api', [\App\Http\Controllers\LogAPIController::class, 'index'])->name("logapi.index");
 

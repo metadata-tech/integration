@@ -1,9 +1,5 @@
 <div>
-    <h1 class="mt-8 text-2xl font-medium text-gray-900 dark:text-white">
-        MQR (Malaysian Qualifications Register) Reference Data
-    </h1>
-
-    <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+    <p class="text-sm text-gray-500">
         Klik butang di bawah untuk menarik data API dan memulakan padanan automatik secara batch.
     </p>
 
@@ -27,7 +23,6 @@
         <form wire:submit.prevent="startMapping">
             <x-button
                 type="submit"
-                class="bg-indigo-600 hover:bg-indigo-700"
                 :disabled="$isMapping"
             >
                 @if($isMapping)
@@ -78,19 +73,19 @@
                         <div class="flex flex-wrap gap-2">
                             <a
                                 href="{{ route('mqr.reports.download', ['run' => $report['id'], 'type' => 'all']) }}"
-                                class="inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-white transition hover:bg-indigo-500"
+                                class="inline-flex items-center rounded-lg bg-primary-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-primary-700"
                             >
                                 Laporan Lengkap
                             </a>
                             <a
                                 href="{{ route('mqr.reports.download', ['run' => $report['id'], 'type' => 'success']) }}"
-                                class="inline-flex items-center rounded-md bg-gray-800 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-white transition hover:bg-gray-700"
+                                class="inline-flex items-center rounded-lg bg-success-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-success-700"
                             >
                                 Berjaya
                             </a>
                             <a
                                 href="{{ route('mqr.reports.download', ['run' => $report['id'], 'type' => 'failure']) }}"
-                                class="inline-flex items-center rounded-md bg-red-600 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-white transition hover:bg-red-500"
+                                class="inline-flex items-center rounded-lg bg-danger-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-danger-700"
                             >
                                 Gagal + Sebab
                             </a>
@@ -119,7 +114,7 @@
 
             <div class="h-3 w-full rounded-full bg-gray-200">
                 <div
-                    class="h-3 rounded-full bg-indigo-600 transition-all duration-300 ease-in-out"
+                    class="h-3 rounded-full bg-primary-600 transition-all duration-300 ease-in-out"
                     style="width: {{ $totalMqr > 0 ? min(100, ($processedCount / $totalMqr) * 100) : 0 }}%"
                 ></div>
             </div>
