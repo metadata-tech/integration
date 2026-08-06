@@ -591,11 +591,17 @@ class MQRService
      */
     private function loadReferenceData(): array
     {
-        $institutions = DB::table('ref_institusi')
+        // Reference tables live in the same database as the mapping table
+        // (spamenu), not in this app's own database.
+        $connection = $this->mappingConnection();
+
+        $institutions = $connection
+            ->table($this->qualifiedTableName('ref_institusi'))
             ->where('is_deleted', 0)
             ->get(['KOD', 'DISKRIPSI']);
 
-        $specializations = DB::table('ref_pengkhususan')
+        $specializations = $connection
+            ->table($this->qualifiedTableName('ref_pengkhususan'))
             ->where('is_deleted', 0)
             ->get(['kod', 'DISKRIPSI', 'KATEGORI']);
 
@@ -765,6 +771,11 @@ class MQRService
 
     private function mappingTableName(): string
     {
+        return $this->qualifiedTableName(self::MAPPING_TABLE);
+    }
+
+    private function qualifiedTableName(string $table): string
+    {
         $schema = trim((string) config('services.mqr.mapping_schema'));
 
         if (
@@ -776,9 +787,7 @@ class MQRService
             );
         }
 
-        return $schema === ''
-            ? self::MAPPING_TABLE
-            : $schema.'.'.self::MAPPING_TABLE;
+        return $schema === '' ? $table : $schema.'.'.$table;
     }
 
     private function mappingPairKey(
