@@ -1,5 +1,5 @@
 <div x-data="{ mastheadOpen: false }" class="bg-washed-100 border-b border-outline-200 text-sm text-gray-700">
-    <div class="max-w-screen-2xl mx-auto px-4 sm:px-6">
+    <div class="px-4 sm:px-6">
         <button type="button"
                 @click="mastheadOpen = ! mastheadOpen"
                 class="flex w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-600">

@@ -1,5 +1,5 @@
 <header class="sticky top-0 z-40 border-b border-outline-200 bg-white">
-    <div class="max-w-screen-2xl mx-auto flex h-14 items-center gap-x-3 px-4 sm:px-6">
+    <div class="flex h-14 items-center gap-x-3 px-4 sm:px-6">
         {{-- Mobile sidebar toggle --}}
         <button type="button"
                 @click="sidebarOpen = ! sidebarOpen"

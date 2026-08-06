@@ -9,7 +9,7 @@
                 message = event.detail.message;
                 show = true;
             ">
-    <div class="max-w-screen-2xl mx-auto py-2 px-3 sm:px-6 lg:px-8">
+    <div class="py-2 px-3 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between flex-wrap">
             <div class="w-0 flex-1 flex items-center min-w-0">
                 <span class="flex p-2 rounded-lg" :class="{ 'bg-success-700': style == 'success', 'bg-danger-700': style == 'danger', 'bg-warning-600': style == 'warning' }">

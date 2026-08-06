@@ -29,7 +29,7 @@
 
             <x-topbar />
 
-            <div class="mx-auto flex w-full max-w-screen-2xl flex-1">
+            <div class="flex w-full flex-1">
                 {{-- Desktop sidebar --}}
                 <aside class="hidden w-64 shrink-0 border-e border-outline-200 bg-white lg:block">
                     <div class="sticky top-14 max-h-[calc(100vh-3.5rem)] overflow-y-auto">

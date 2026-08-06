@@ -5,6 +5,11 @@
     $isError = in_array($status, ['error', false, 'false'], true);
     $isSuccess = in_array($status, ['success', true, 'true'], true);
     $message = is_array($result) ? ($result['message'] ?? null) : null;
+
+    // Some APIs return `message` as an array/object; coerce to text so Blade can escape it.
+    if ($message !== null && ! is_scalar($message)) {
+        $message = json_encode($message, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    }
 @endphp
 
 <div {{ $attributes->merge(['class' => 'mt-6 border-t border-outline-200 pt-5']) }}>
