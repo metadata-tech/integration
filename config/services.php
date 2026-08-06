@@ -71,6 +71,11 @@ return [
     
     'mqr' => [
         'url' => env('MQR_URL'),
+        'mapping_connection' => env(
+            'MQR_MAPPING_CONNECTION',
+            'mqr_mapping'
+        ),
+        'mapping_schema' => env('MQR_MAPPING_DB_SCHEMA'),
     ],
     
     'jpn' => [

@@ -14,6 +14,9 @@ use Livewire\Livewire;
 
 beforeEach(function () {
     Storage::fake('local');
+    config()->set('services.mqr.mapping_connection', 'mqr_mapping');
+    config()->set('services.mqr.mapping_schema', null);
+    DB::purge('mqr_mapping');
 
     Schema::create('mqr_data', function (Blueprint $table): void {
         $table->id();
@@ -36,19 +39,25 @@ beforeEach(function () {
         $table->boolean('is_deleted')->default(false);
     });
 
+    $createMappingTable = function (Blueprint $table): void {
+        $table->bigIncrements('kod');
+        $table->string('kod_institusi');
+        $table->string('kod_pengkhususan');
+        $table->integer('kategori')->nullable();
+        $table->string('kod_mqa')->nullable();
+        $table->integer('status')->default(0);
+        $table->boolean('is_deleted')->default(false);
+        $table->timestamp('tarikh_cipta')->nullable();
+        $table->timestamp('tarikh_ubahsuai')->nullable();
+    };
+
     Schema::create(
         'padanan_institusi_pengkhususan',
-        function (Blueprint $table): void {
-            $table->bigIncrements('kod');
-            $table->string('kod_institusi');
-            $table->string('kod_pengkhususan');
-            $table->integer('kategori')->nullable();
-            $table->string('kod_mqa')->nullable();
-            $table->integer('status')->default(0);
-            $table->boolean('is_deleted')->default(false);
-            $table->timestamp('tarikh_cipta')->nullable();
-            $table->timestamp('tarikh_ubahsuai')->nullable();
-        }
+        $createMappingTable
+    );
+    Schema::connection('mqr_mapping')->create(
+        'padanan_institusi_pengkhususan',
+        $createMappingTable
     );
 
     DB::table('ref_institusi')->insert([
@@ -80,6 +89,7 @@ beforeEach(function () {
 
 afterEach(function () {
     Date::setTestNow();
+    DB::purge('mqr_mapping');
 });
 
 it('only publishes Excel-compatible reports after every batch is complete', function () {
@@ -109,7 +119,11 @@ it('only publishes Excel-compatible reports after every batch is complete', func
         ->and($run->processed_count)->toBe(2)
         ->and($run->success_count)->toBe(1)
         ->and($run->failure_count)->toBe(1)
-        ->and($reports->completedReports())->toHaveCount(1);
+        ->and($reports->completedReports())->toHaveCount(1)
+        ->and(DB::connection('mqr_mapping')
+            ->table('padanan_institusi_pengkhususan')
+            ->value('kod_mqa'))->toBe('MQA/FA0001')
+        ->and(DB::table('padanan_institusi_pengkhususan')->count())->toBe(0);
 
     $content = Storage::disk('local')->get(
         $run->report_path.'/laporan_lengkap.csv'
@@ -203,6 +217,99 @@ it('does not start an API sync while a mapping run is active', function () {
         ->and($response['message'])->toContain('proses padanan masih berjalan');
 });
 
+it('updates every active duplicate in the configured mapping database', function () {
+    DB::connection('mqr_mapping')
+        ->table('padanan_institusi_pengkhususan')
+        ->insert([
+            [
+                'kod_institusi' => '00038',
+                'kod_pengkhususan' => 'P001',
+                'kategori' => 1,
+                'kod_mqa' => null,
+                'status' => 0,
+                'is_deleted' => 0,
+                'tarikh_cipta' => now(),
+            ],
+            [
+                'kod_institusi' => '00038',
+                'kod_pengkhususan' => 'P001',
+                'kategori' => 1,
+                'kod_mqa' => 'KOD/LAMA',
+                'status' => 0,
+                'is_deleted' => 0,
+                'tarikh_cipta' => now(),
+            ],
+        ]);
+    DB::table('mqr_data')
+        ->where('kod_rujukan_akreditasi_penuh', 'MQA/FA0002')
+        ->delete();
+
+    $reports = app(MQRReportService::class);
+    $run = $reports->startOrResume(null);
+    app(MQRService::class)->mapNextBatch($run->id, 250, $reports);
+
+    $target = DB::connection('mqr_mapping')
+        ->table('padanan_institusi_pengkhususan');
+
+    expect($target->count())->toBe(2)
+        ->and($target->where('kod_mqa', 'MQA/FA0001')->count())->toBe(2)
+        ->and(DB::table('padanan_institusi_pengkhususan')->count())->toBe(0);
+});
+
+it('keeps a deleted mapping and inserts a new active mapping', function () {
+    DB::connection('mqr_mapping')
+        ->table('padanan_institusi_pengkhususan')
+        ->insert([
+            'kod_institusi' => '00038',
+            'kod_pengkhususan' => 'P001',
+            'kategori' => 1,
+            'kod_mqa' => 'KOD/ARKIB',
+            'status' => 0,
+            'is_deleted' => 1,
+            'tarikh_cipta' => now(),
+        ]);
+    DB::table('mqr_data')
+        ->where('kod_rujukan_akreditasi_penuh', 'MQA/FA0002')
+        ->delete();
+
+    $reports = app(MQRReportService::class);
+    $run = $reports->startOrResume(null);
+    app(MQRService::class)->mapNextBatch($run->id, 250, $reports);
+
+    $target = DB::connection('mqr_mapping')
+        ->table('padanan_institusi_pengkhususan');
+
+    expect($target->count())->toBe(2)
+        ->and((clone $target)->where('is_deleted', 1)->value('kod_mqa'))
+        ->toBe('KOD/ARKIB')
+        ->and((clone $target)->where('is_deleted', 0)->value('kod_mqa'))
+        ->toBe('MQA/FA0001');
+});
+
+it('does not advance the run when the target mapping connection fails', function () {
+    config()->set(
+        'services.mqr.mapping_connection',
+        'connection_yang_tidak_wujud'
+    );
+
+    $reports = app(MQRReportService::class);
+    $run = $reports->startOrResume(null);
+    $response = app(MQRService::class)->mapNextBatch(
+        $run->id,
+        250,
+        $reports
+    );
+    $run->refresh();
+
+    expect($response['status'])->toBeFalse()
+        ->and($run->processed_count)->toBe(0)
+        ->and($run->last_mqr_id)->toBe(0);
+
+    Storage::disk('local')->assertMissing(
+        $run->report_path.'/laporan_lengkap.csv'
+    );
+});
+
 it('resumes the same batch safely after a report write rolls back', function () {
     DB::table('mqr_data')
         ->where('kod_rujukan_akreditasi_penuh', 'MQA/FA0002')
@@ -238,7 +345,9 @@ it('resumes the same batch safely after a report write rolls back', function () 
     expect($failedAttempt['status'])->toBeFalse()
         ->and($run->status)->toBe(MqrMappingRun::STATUS_RUNNING)
         ->and($run->processed_count)->toBe(0)
-        ->and(DB::table('padanan_institusi_pengkhususan')->count())->toBe(0);
+        ->and(DB::connection('mqr_mapping')
+            ->table('padanan_institusi_pengkhususan')
+            ->count())->toBe(1);
 
     $retry = app(MQRService::class)->mapNextBatch(
         $run->id,
@@ -253,7 +362,12 @@ it('resumes the same batch safely after a report write rolls back', function () 
 
     expect($retry['status'])->toBeTrue()
         ->and($run->status)->toBe(MqrMappingRun::STATUS_COMPLETED)
-        ->and(DB::table('padanan_institusi_pengkhususan')->count())->toBe(1)
+        ->and(DB::connection('mqr_mapping')
+            ->table('padanan_institusi_pengkhususan')
+            ->count())->toBe(1)
+        ->and(DB::connection('mqr_mapping')
+            ->table('padanan_institusi_pengkhususan')
+            ->value('kod_mqa'))->toBe('MQA/FA0001')
         ->and(substr_count($content, 'MQA/FA0001'))->toBe(1);
 });
 

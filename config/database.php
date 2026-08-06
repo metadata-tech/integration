@@ -2,6 +2,8 @@
 
 use Illuminate\Support\Str;
 
+$mqrMappingDriver = env('MQR_MAPPING_DB_DRIVER', 'mysql');
+
 return [
 
     /*
@@ -60,6 +62,38 @@ return [
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
+        ],
+
+        'mqr_mapping' => [
+            'driver' => $mqrMappingDriver,
+            'url' => env('MQR_MAPPING_DB_URL'),
+            'host' => env('MQR_MAPPING_DB_HOST', '127.0.0.1'),
+            'port' => env('MQR_MAPPING_DB_PORT', '3306'),
+            'database' => env('MQR_MAPPING_DB_DATABASE', 'spamenu'),
+            'username' => env('MQR_MAPPING_DB_USERNAME', 'root'),
+            'password' => env('MQR_MAPPING_DB_PASSWORD', ''),
+            'unix_socket' => env('MQR_MAPPING_DB_SOCKET', ''),
+            'charset' => env('MQR_MAPPING_DB_CHARSET', 'utf8mb4'),
+            'collation' => env(
+                'MQR_MAPPING_DB_COLLATION',
+                'utf8mb4_unicode_ci'
+            ),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'foreign_key_constraints' => env(
+                'MQR_MAPPING_DB_FOREIGN_KEYS',
+                true
+            ),
+            'strict' => true,
+            'engine' => null,
+            'options' => $mqrMappingDriver === 'mysql'
+                && extension_loaded('pdo_mysql') ? array_filter([
+                    PDO::MYSQL_ATTR_SSL_CA => env('MQR_MAPPING_MYSQL_ATTR_SSL_CA'),
+                    PDO::ATTR_TIMEOUT => (int) env(
+                        'MQR_MAPPING_DB_TIMEOUT',
+                        10
+                    ),
+                ]) : [],
         ],
 
         'iscaf_db' => [
