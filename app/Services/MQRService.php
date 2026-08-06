@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\APILog;
 use App\Models\MqrData;
 use App\Models\MqrMappingRun;
+use Illuminate\Database\Connection;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -15,6 +17,8 @@ use Throwable;
 
 class MQRService
 {
+    private const MAPPING_TABLE = 'padanan_institusi_pengkhususan';
+
     private const MINIMUM_PREFIX_LENGTH = 5;
 
     /**
@@ -104,6 +108,7 @@ class MQRService
             }
 
             $reportRows = [];
+            $successfulMappings = [];
 
             foreach ($mqrData as $mqr) {
                 $stats['processed']++;
@@ -111,11 +116,17 @@ class MQRService
                 $reportRows[] = $this->mappingReportRow($mqr, $mapping);
 
                 if ($mapping['success']) {
-                    $this->saveMapping(
-                        $mqr,
-                        $mapping['institution'],
-                        $mapping['specialization']
-                    );
+                    $institutionCode = (string) $mapping['institution']->KOD;
+                    $specializationCode = (string) $mapping['specialization']->kod;
+                    $successfulMappings[$this->mappingPairKey(
+                        $institutionCode,
+                        $specializationCode
+                    )] = [
+                        'kod_institusi' => $institutionCode,
+                        'kod_pengkhususan' => $specializationCode,
+                        'kategori' => $mapping['specialization']->KATEGORI,
+                        'kod_mqa' => $mqr->kod_rujukan_akreditasi_penuh,
+                    ];
 
                     $stats['berjaya']++;
                     $stats['latest_berjaya'][] = "{$mqr->nama_institusi} - {$mqr->nama_kelayakan_bm}";
@@ -127,6 +138,7 @@ class MQRService
                 $stats['latest_gagal'][] = "{$mqr->nama_institusi} - {$mqr->nama_kelayakan_bm} ({$mapping['reason']})";
             }
 
+            $this->saveMappings(array_values($successfulMappings));
             $reportService->writeBatchParts($run, $reportRows);
 
             $processedCount = $run->processed_count + $stats['processed'];
@@ -590,35 +602,190 @@ class MQRService
         return $this->prepareReferenceData($institutions, $specializations);
     }
 
-    private function saveMapping(object $mqr, object $institution, object $specialization): void
+    /**
+     * Simpan semua pasangan berjaya menggunakan maksimum tiga query sasaran:
+     * satu bacaan, satu bulk update dan satu bulk insert.
+     *
+     * @param  array<int, array{
+     *     kod_institusi: string,
+     *     kod_pengkhususan: string,
+     *     kategori: mixed,
+     *     kod_mqa: mixed
+     * }>  $mappings
+     */
+    private function saveMappings(array $mappings): void
     {
-        $existingMapping = DB::table('padanan_institusi_pengkhususan')
-            ->where('kod_institusi', $institution->KOD)
-            ->where('kod_pengkhususan', $specialization->kod)
-            ->where('is_deleted', 0)
-            ->first();
-
-        if ($existingMapping) {
-            DB::table('padanan_institusi_pengkhususan')
-                ->where('kod', $existingMapping->kod)
-                ->update([
-                    'kod_mqa' => $mqr->kod_rujukan_akreditasi_penuh,
-                    'tarikh_ubahsuai' => now(),
-                ]);
-
+        if ($mappings === []) {
             return;
         }
 
-        DB::table('padanan_institusi_pengkhususan')->insert([
-            'kod_institusi' => $institution->KOD,
-            'kod_pengkhususan' => $specialization->kod,
-            'kategori' => $specialization->KATEGORI,
-            'kod_mqa' => $mqr->kod_rujukan_akreditasi_penuh,
-            'status' => 0,
-            'is_deleted' => 0,
-            'tarikh_cipta' => now(),
-            'tarikh_ubahsuai' => now(),
-        ]);
+        $connection = $this->mappingConnection();
+
+        $connection->transaction(function () use (
+            $connection,
+            $mappings
+        ): void {
+            $existingMappings = $this->mappingTable($connection)
+                ->select(['kod', 'kod_institusi', 'kod_pengkhususan'])
+                ->where('is_deleted', 0)
+                ->where(function (QueryBuilder $query) use ($mappings): void {
+                    foreach ($mappings as $mapping) {
+                        $query->orWhere(
+                            function (QueryBuilder $pair) use ($mapping): void {
+                                $pair
+                                    ->where(
+                                        'kod_institusi',
+                                        $mapping['kod_institusi']
+                                    )
+                                    ->where(
+                                        'kod_pengkhususan',
+                                        $mapping['kod_pengkhususan']
+                                    );
+                            }
+                        );
+                    }
+                })
+                ->lockForUpdate()
+                ->get()
+                ->groupBy(
+                    fn (object $mapping): string => $this->mappingPairKey(
+                        (string) $mapping->kod_institusi,
+                        (string) $mapping->kod_pengkhususan
+                    )
+                );
+            $updatedAt = now();
+            $updates = [];
+            $inserts = [];
+
+            foreach ($mappings as $mapping) {
+                $key = $this->mappingPairKey(
+                    $mapping['kod_institusi'],
+                    $mapping['kod_pengkhususan']
+                );
+                $existingRows = $existingMappings->get($key);
+
+                if ($existingRows) {
+                    foreach ($existingRows as $existingRow) {
+                        $updates[] = [
+                            'kod' => $existingRow->kod,
+                            'kod_mqa' => $mapping['kod_mqa'],
+                            'tarikh_ubahsuai' => $updatedAt,
+                        ];
+                    }
+
+                    continue;
+                }
+
+                $inserts[] = [
+                    ...$mapping,
+                    'status' => 0,
+                    'is_deleted' => 0,
+                    'tarikh_cipta' => $updatedAt,
+                    'tarikh_ubahsuai' => $updatedAt,
+                ];
+            }
+
+            if ($updates !== []) {
+                $this->bulkUpdateMappings(
+                    $connection,
+                    $updates,
+                    $updatedAt
+                );
+            }
+
+            if ($inserts !== []) {
+                $this->mappingTable($connection)->insert($inserts);
+            }
+        });
+    }
+
+    /**
+     * @param  array<int, array{kod: mixed, kod_mqa: mixed, tarikh_ubahsuai: mixed}>  $updates
+     */
+    private function bulkUpdateMappings(
+        Connection $connection,
+        array $updates,
+        mixed $updatedAt
+    ): void {
+        $grammar = $connection->getQueryGrammar();
+        $table = $grammar->wrapTable($this->mappingTableName());
+        $primaryKey = $grammar->wrap('kod');
+        $mqaCode = $grammar->wrap('kod_mqa');
+        $updatedColumn = $grammar->wrap('tarikh_ubahsuai');
+        $caseStatements = [];
+        $caseBindings = [];
+        $ids = [];
+
+        foreach ($updates as $update) {
+            $caseStatements[] = 'when ? then ?';
+            $caseBindings[] = $update['kod'];
+            $caseBindings[] = $update['kod_mqa'];
+            $ids[] = $update['kod'];
+        }
+
+        $idPlaceholders = implode(', ', array_fill(0, count($ids), '?'));
+        $sql = sprintf(
+            'update %s set %s = case %s %s else %s end, %s = ? where %s in (%s)',
+            $table,
+            $mqaCode,
+            $primaryKey,
+            implode(' ', $caseStatements),
+            $mqaCode,
+            $updatedColumn,
+            $primaryKey,
+            $idPlaceholders
+        );
+
+        $connection->update(
+            $sql,
+            [...$caseBindings, $updatedAt, ...$ids]
+        );
+    }
+
+    private function mappingConnection(): Connection
+    {
+        $connection = trim((string) config(
+            'services.mqr.mapping_connection',
+            'mqr_mapping'
+        ));
+
+        if ($connection === '') {
+            throw new \RuntimeException(
+                'Connection jadual padanan MQR belum dikonfigurasi.'
+            );
+        }
+
+        return DB::connection($connection);
+    }
+
+    private function mappingTable(Connection $connection): QueryBuilder
+    {
+        return $connection->table($this->mappingTableName());
+    }
+
+    private function mappingTableName(): string
+    {
+        $schema = trim((string) config('services.mqr.mapping_schema'));
+
+        if (
+            $schema !== ''
+            && preg_match('/\A[A-Za-z_][A-Za-z0-9_]*\z/', $schema) !== 1
+        ) {
+            throw new \RuntimeException(
+                'Nama schema jadual padanan MQR tidak sah.'
+            );
+        }
+
+        return $schema === ''
+            ? self::MAPPING_TABLE
+            : $schema.'.'.self::MAPPING_TABLE;
+    }
+
+    private function mappingPairKey(
+        string $institutionCode,
+        string $specializationCode
+    ): string {
+        return $institutionCode."\x1F".$specializationCode;
     }
 
     public function syncData()
@@ -966,6 +1133,8 @@ class MQRService
                 ->orderBy('id')
                 ->chunkById(1000, function (Collection $mqrChunk) use (&$stats, $references): void {
                     DB::transaction(function () use ($mqrChunk, &$stats, $references): void {
+                        $successfulMappings = [];
+
                         foreach ($mqrChunk as $mqr) {
                             $stats['total_diperiksa']++;
                             $mapping = $this->evaluateMapping($mqr, $references);
@@ -976,13 +1145,21 @@ class MQRService
                                 continue;
                             }
 
-                            $this->saveMapping(
-                                $mqr,
-                                $mapping['institution'],
-                                $mapping['specialization']
-                            );
+                            $institutionCode = (string) $mapping['institution']->KOD;
+                            $specializationCode = (string) $mapping['specialization']->kod;
+                            $successfulMappings[$this->mappingPairKey(
+                                $institutionCode,
+                                $specializationCode
+                            )] = [
+                                'kod_institusi' => $institutionCode,
+                                'kod_pengkhususan' => $specializationCode,
+                                'kategori' => $mapping['specialization']->KATEGORI,
+                                'kod_mqa' => $mqr->kod_rujukan_akreditasi_penuh,
+                            ];
                             $stats['berjaya_dipadankan']++;
                         }
+
+                        $this->saveMappings(array_values($successfulMappings));
                     });
                 });
 
