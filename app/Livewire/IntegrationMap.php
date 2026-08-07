@@ -52,7 +52,7 @@ class IntegrationMap extends Component
             ->where('created_at', '>=', now()->subMinutes(self::LOG_WINDOW_MINUTES))
             ->whereNotNull('url')
             ->orderByDesc('created_at')
-            ->get(['url', 'status_code', 'created_at']);
+            ->get(['url', 'status_code', 'output', 'created_at']);
 
         $results = [];
         $toPing = [];
@@ -109,7 +109,7 @@ class IntegrationMap extends Component
         $streakSpan = $streak->last()->created_at
             ->diffInSeconds($streak->first()->created_at);
 
-        $code = $latest->status_code ?: 'tiada respons';
+        $code = $this->errorCodeForLog($latest) ?? 'tiada respons';
 
         if ($streakSpan >= self::ERROR_STREAK_SECONDS) {
             return [
@@ -128,7 +128,45 @@ class IntegrationMap extends Component
 
     private function isErrorLog(APILog $log): bool
     {
-        return $log->status_code === null || (int) $log->status_code >= 500;
+        if ($log->status_code === null) {
+            return true;
+        }
+
+        if ((int) $log->status_code >= 500) {
+            return true;
+        }
+
+        return $this->bodyErrorCode($log->output) !== null;
+    }
+
+    /**
+     * Some upstream APIs return HTTP 200 with an error payload, e.g.
+     * {"code": 503, "error": "The server cannot handle the request..."}.
+     */
+    private function bodyErrorCode(mixed $output): ?int
+    {
+        if (! is_array($output) || ! isset($output['code'])) {
+            return null;
+        }
+
+        $code = (int) $output['code'];
+
+        return $code >= 500 ? $code : null;
+    }
+
+    private function errorCodeForLog(APILog $log): ?int
+    {
+        if ($log->status_code === null) {
+            return null;
+        }
+
+        $httpCode = (int) $log->status_code;
+
+        if ($httpCode >= 500) {
+            return $httpCode;
+        }
+
+        return $this->bodyErrorCode($log->output) ?? ($httpCode >= 400 ? $httpCode : null);
     }
 
     /**
