@@ -9,7 +9,9 @@
 | /integrasi/{slug}, the dashboard overview and the integration map.
 | The "component" key is the Livewire component mounted on the page.
 | "health_url" is pinged by the dashboard map to show connectivity,
-| and "code" is the short badge shown on the agency node.
+| "log_url_contains" / "log_url_excludes" narrow which api_logs count
+| toward that integration's status, and "code" is the short badge shown
+| on the agency node.
 |
 */
 
@@ -61,6 +63,8 @@ return [
         'component' => 'l-p-m-form',
         'code' => 'LPM',
         'health_url' => env('lpm_svk_url'),
+        'log_url_contains' => '/api/verification/spm',
+        'log_url_excludes' => ['/api/verification/spmu'],
     ],
     'lpm-spm-ulangan' => [
         'label' => 'LPM SPM Ulangan',
@@ -69,6 +73,7 @@ return [
         'component' => 'l-p-m-s-v-k-s-p-m-ulangan-form',
         'code' => 'LPM',
         'health_url' => env('lpm_svk_url'),
+        'log_url_contains' => '/api/verification/spmu',
     ],
     'lpm-apkv' => [
         'label' => 'LPM APKV / SVM',

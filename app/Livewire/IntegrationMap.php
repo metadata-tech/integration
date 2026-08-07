@@ -71,7 +71,7 @@ class IntegrationMap extends Component
             }
 
             $logs = $recentLogs
-                ->filter(fn ($log) => str_starts_with($log->url, $url))
+                ->filter(fn ($log) => $this->logMatchesIntegration($log, $integration, $url))
                 ->values();
 
             if ($logs->isNotEmpty()) {
@@ -126,6 +126,62 @@ class IntegrationMap extends Component
         ];
     }
 
+    private function logMatchesIntegration(APILog $log, array $integration, string $healthUrl): bool
+    {
+        $logUrl = $log->url ?? '';
+
+        if ($logUrl === '') {
+            return false;
+        }
+
+        if (isset($integration['log_url_contains'])) {
+            if (! str_contains($logUrl, $integration['log_url_contains'])) {
+                return false;
+            }
+        } elseif (! $this->urlMatchesHealthHost($healthUrl, $logUrl)) {
+            return false;
+        } elseif (! str_starts_with($logUrl, $healthUrl)) {
+            // Same host but different scheme/path prefix — still count the log.
+            $healthPath = parse_url($healthUrl, PHP_URL_PATH) ?: '';
+            $logPath = parse_url($logUrl, PHP_URL_PATH) ?: '';
+
+            if ($healthPath !== '' && $healthPath !== '/' && ! str_starts_with($logPath, $healthPath)) {
+                return false;
+            }
+        }
+
+        foreach ($integration['log_url_excludes'] ?? [] as $exclude) {
+            if (str_contains($logUrl, $exclude)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function urlMatchesHealthHost(string $healthUrl, string $logUrl): bool
+    {
+        $healthHost = strtolower(parse_url($healthUrl, PHP_URL_HOST) ?: '');
+        $logHost = strtolower(parse_url($logUrl, PHP_URL_HOST) ?: '');
+
+        return $healthHost !== '' && $healthHost === $logHost;
+    }
+
+    private function normalizeOutput(mixed $output): ?array
+    {
+        if (is_array($output)) {
+            return $output;
+        }
+
+        if (! is_string($output) || trim($output) === '') {
+            return null;
+        }
+
+        $decoded = json_decode($output, true);
+
+        return is_array($decoded) ? $decoded : null;
+    }
+
     private function isErrorLog(APILog $log): bool
     {
         if ($log->status_code === null) {
@@ -145,13 +201,25 @@ class IntegrationMap extends Component
      */
     private function bodyErrorCode(mixed $output): ?int
     {
-        if (! is_array($output) || ! isset($output['code'])) {
+        $output = $this->normalizeOutput($output);
+
+        if ($output === null) {
             return null;
         }
 
-        $code = (int) $output['code'];
+        if (isset($output['code'])) {
+            $code = (int) $output['code'];
 
-        return $code >= 500 ? $code : null;
+            if ($code >= 500) {
+                return $code;
+            }
+        }
+
+        if (! empty($output['error']) && ! isset($output['user'], $output['data'])) {
+            return 503;
+        }
+
+        return null;
     }
 
     private function errorCodeForLog(APILog $log): ?int
