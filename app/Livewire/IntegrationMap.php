@@ -120,8 +120,8 @@ class IntegrationMap extends Component
         }
 
         return [
-            'status' => 'up',
-            'detail' => "Aktif · ralat terpencil (HTTP {$code})",
+            'status' => 'warning',
+            'detail' => "Ralat terpencil (HTTP {$code}) · {$age}",
             'host' => $host,
         ];
     }

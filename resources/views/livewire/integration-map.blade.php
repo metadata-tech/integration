@@ -24,6 +24,7 @@
             <div class="flex items-center gap-4">
                 <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
                     <span class="flex items-center gap-1.5"><span class="size-2 rounded-full bg-success-600"></span>Aktif</span>
+                    <span class="flex items-center gap-1.5"><span class="size-2 rounded-full bg-warning-600"></span>Ralat terpencil</span>
                     <span class="flex items-center gap-1.5"><span class="size-2 rounded-full bg-danger-600"></span>Gagal</span>
                     <span class="flex items-center gap-1.5"><span class="size-2 rounded-full bg-gray-300"></span>Tiada URL</span>
                 </div>
@@ -55,6 +56,9 @@
                     @if ($status === 'up')
                         <path d="{{ $path }}" fill="none" stroke="#16A34A" stroke-width="2"
                               stroke-linecap="round" class="cable-flow" />
+                    @elseif ($status === 'warning')
+                        <path d="{{ $path }}" fill="none" stroke="#D97706" stroke-width="2"
+                              stroke-linecap="round" class="cable-flow" />
                     @elseif ($status === 'down')
                         <path d="{{ $path }}" fill="none" stroke="#DC2626" stroke-width="2"
                               stroke-linecap="round" class="cable-pulse" />
@@ -81,9 +85,18 @@
                         $result = $results[$slug] ?? ['status' => 'unknown', 'detail' => 'Tiada maklumat', 'host' => null];
                         $status = $result['status'];
 
-                        $dotColor = ['up' => '#16A34A', 'down' => '#DC2626', 'unknown' => '#A1A1AA'][$status];
+                        $dotColor = match ($status) {
+                            'up' => '#16A34A',
+                            'warning' => '#D97706',
+                            'down' => '#DC2626',
+                            default => '#A1A1AA',
+                        };
                         $detail = $result['detail'];
-                        $detailColor = $status === 'down' ? '#DC2626' : '#71717A';
+                        $detailColor = match ($status) {
+                            'down' => '#DC2626',
+                            'warning' => '#D97706',
+                            default => '#71717A',
+                        };
                     @endphp
 
                     <a href="{{ route("integrasi.{$slug}") }}" class="map-node">
