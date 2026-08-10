@@ -81,11 +81,11 @@ class KPTSKPGService {
         ]);
 
         return is_array($responseData)
-            ? $this->removeDuplicateData($responseData)
+            ? $this->filterResponseData($responseData)
             : $responseData;
     }
 
-    private function removeDuplicateData(array $responseData): array
+    private function filterResponseData(array $responseData): array
     {
         if (
             ! isset($responseData['data'])
@@ -99,6 +99,10 @@ class KPTSKPGService {
         $uniqueData = [];
 
         foreach ($responseData['data'] as $record) {
+            if (! $this->hasAllowedCourseLevel($record)) {
+                continue;
+            }
+
             $fingerprint = hash(
                 'sha256',
                 serialize($this->canonicalizeForComparison($record))
@@ -122,6 +126,22 @@ class KPTSKPGService {
         }
 
         return $responseData;
+    }
+
+    private function hasAllowedCourseLevel(mixed $record): bool
+    {
+        if (
+            ! is_array($record)
+            || ! array_key_exists('level_course_id', $record)
+        ) {
+            return false;
+        }
+
+        return in_array(
+            trim((string) $record['level_course_id']),
+            ['2', '3', '4', '5', '6', '7'],
+            true
+        );
     }
 
     private function canonicalizeForComparison(mixed $value): mixed

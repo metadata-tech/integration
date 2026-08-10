@@ -62,6 +62,7 @@ it('keeps different qualifications even when their dates are the same', function
     $first = [
         'ic_no' => '760122075273',
         'id_univ' => '18',
+        'level_course_id' => 4,
         'course_code' => 'COURSE-A',
         'end_date' => '2018-08-27',
         'MQA_code' => 'MQA/A',
@@ -89,6 +90,7 @@ it('keeps different qualifications even when their dates are the same', function
 it('treats key order and line endings as non-meaningful differences', function () {
     $first = [
         'ic_no' => '760122075273',
+        'level_course_id' => 4,
         'course_code' => 'COURSE-A',
         'course_long' => "PROGRAM KOMPUTER\r\n",
         'MQA_code' => 'MQA/A',
@@ -106,6 +108,31 @@ it('treats key order and line endings as non-meaningful differences', function (
 
     expect($result['data'])->toBe([$first])
         ->and($result['message'])->toContain('TOTAL ROW : 1');
+});
+
+it('only returns course levels two through seven', function () {
+    $records = [
+        ['course_code' => 'LEVEL-1', 'level_course_id' => 1],
+        ['course_code' => 'LEVEL-2', 'level_course_id' => 2],
+        ['course_code' => 'LEVEL-3', 'level_course_id' => '3'],
+        ['course_code' => 'LEVEL-7', 'level_course_id' => ' 7 '],
+        ['course_code' => 'LEVEL-8', 'level_course_id' => 8],
+        ['course_code' => 'NO-LEVEL'],
+    ];
+
+    fakeKptSkpgResponse([
+        'status' => '200',
+        'message' => ['TOTAL ROW : 6', 'SUCCESS'],
+        'data' => $records,
+    ]);
+
+    $result = app(KPTSKPGService::class)->callAPI('760122075273');
+
+    expect(array_column($result['data'], 'course_code'))->toBe([
+        'LEVEL-2',
+        'LEVEL-3',
+        'LEVEL-7',
+    ])->and($result['message'])->toContain('TOTAL ROW : 3');
 });
 
 it('leaves non-list response data unchanged', function () {
