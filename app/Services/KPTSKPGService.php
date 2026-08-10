@@ -45,14 +45,12 @@ class KPTSKPGService {
     }
     public function callAPI($no_kp)
     {
-        $token = null;
-        #ray($this->GetToken()->json()['token']);
-        #dd($this->GetToken()->json()['data']['auth_Token']);;
-        if (empty($this->GetToken()->json()['data']['auth_Token'])) {
+        $tokenResponse = $this->GetToken()->json();
+        $token = $tokenResponse['data']['auth_Token'] ?? null;
+
+        if (empty($token)) {
             return null;
         }
-        $token = $this->GetToken()->json()['data']['auth_Token'];
-        ray($token);
 
         $request_data = [
             "ic_no" => $no_kp,
@@ -75,16 +73,102 @@ class KPTSKPGService {
             ->withHeaders($headers)
             ->post($url, $request_data);
 
-
-        ray($response);
-        ray($response->json());
+        $responseData = $response->json();
 
         $log->update([
-            'output' => $response->json(),
+            'output' => $responseData,
             'status_code' => $response->getStatusCode()
         ]);
 
-        return $response->json();
+        return is_array($responseData)
+            ? $this->removeDuplicateData($responseData)
+            : $responseData;
+    }
+
+    private function removeDuplicateData(array $responseData): array
+    {
+        if (
+            ! isset($responseData['data'])
+            || ! is_array($responseData['data'])
+            || ! array_is_list($responseData['data'])
+        ) {
+            return $responseData;
+        }
+
+        $seen = [];
+        $uniqueData = [];
+
+        foreach ($responseData['data'] as $record) {
+            $fingerprint = hash(
+                'sha256',
+                serialize($this->canonicalizeForComparison($record))
+            );
+
+            if (isset($seen[$fingerprint])) {
+                continue;
+            }
+
+            $seen[$fingerprint] = true;
+            $uniqueData[] = $record;
+        }
+
+        $responseData['data'] = $uniqueData;
+
+        if (array_key_exists('message', $responseData)) {
+            $responseData['message'] = $this->updateTotalRowMessage(
+                $responseData['message'],
+                count($uniqueData)
+            );
+        }
+
+        return $responseData;
+    }
+
+    private function canonicalizeForComparison(mixed $value): mixed
+    {
+        if (is_string($value)) {
+            return str_replace(["\r\n", "\r"], "\n", trim($value));
+        }
+
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        $canonical = [];
+
+        foreach ($value as $key => $item) {
+            $canonical[$key] = $this->canonicalizeForComparison($item);
+        }
+
+        if (! array_is_list($canonical)) {
+            ksort($canonical, SORT_STRING);
+        }
+
+        return $canonical;
+    }
+
+    private function updateTotalRowMessage(mixed $messages, int $total): mixed
+    {
+        if (! is_array($messages)) {
+            return $messages;
+        }
+
+        return array_map(
+            static function (mixed $message) use ($total): mixed {
+                if (
+                    is_string($message)
+                    && preg_match(
+                        '/^\s*TOTAL\s+ROW\s*:\s*\d+\s*$/i',
+                        $message
+                    ) === 1
+                ) {
+                    return "TOTAL ROW : {$total}";
+                }
+
+                return $message;
+            },
+            $messages
+        );
     }
 
     public function process($ic_no)
