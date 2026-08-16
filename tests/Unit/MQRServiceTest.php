@@ -22,21 +22,29 @@ function mqrReferences(
         ]
     );
 
-    return $service->prepareReferenceData(
+    $references = $service->prepareReferenceData(
         $institutionRecords,
         $specializationRecords
     );
+    $references['qualification_level_codes'] = collect([1, 2, 3, 4, 6, 7])
+        ->mapWithKeys(fn (int $code): array => [$code => $code]);
+
+    return $references;
 }
 
 function mqrRecord(
     ?string $institution,
     ?string $qualification,
-    ?string $mqaCode = 'MQA/FA0001'
+    ?string $mqaCode = 'MQA/FA0001',
+    ?string $qualificationLevel = null,
+    ?string $necCode = null
 ): object {
     return (object) [
         'kod_rujukan_akreditasi_penuh' => $mqaCode,
         'nama_institusi' => $institution,
         'nama_kelayakan_bm' => $qualification,
+        'peringkat_kelayakan' => $qualificationLevel,
+        'kod_nec' => $necCode,
     ];
 }
 
@@ -423,4 +431,50 @@ it('normalizes punctuation as word boundaries', function () {
 
     expect($result['success'])->toBeTrue()
         ->and($result['institution']->KOD)->toBe('00001');
+});
+
+it('resolves qualification level ids from MQR level and NEC codes', function () {
+    $service = new MQRService;
+    $references = mqrReferences(
+        $service,
+        [['00001', 'UNIVERSITI CONTOH']],
+        [['P001', 'Kelayakan Contoh']]
+    );
+    $cases = [
+        ['3', '0110', 1],
+        ['3', '0111', 1],
+        ['3', '0112', 1],
+        ['3', '0113', 1],
+        ['3', '0114', 1],
+        ['4', '0111', 1],
+        ['6', '0114', 1],
+        ['3', '0210', 2],
+        ['4', '0210', 2],
+        ['6', '0210', 2],
+        ['7', '0112', 3],
+        [' 7 ', ' 0114 ', 3],
+        ['7', '0210', 4],
+        ['8', '0110', 6],
+        ['9', '0210', 6],
+        ['10', '', 6],
+        ['11', '0110', 7],
+        ['12', '0110', null],
+        [null, '0110', null],
+    ];
+
+    foreach ($cases as [$level, $necCode, $expectedId]) {
+        $result = $service->evaluateMapping(
+            mqrRecord(
+                'Universiti Contoh',
+                'Kelayakan Contoh',
+                'MQA/FA0001',
+                $level,
+                $necCode
+            ),
+            $references
+        );
+
+        expect($result['success'])->toBeTrue()
+            ->and($result['qualification_level_id'])->toBe($expectedId);
+    }
 });

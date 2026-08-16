@@ -19,6 +19,16 @@ class MQRService
 {
     private const MAPPING_TABLE = 'padanan_institusi_pengkhususan';
 
+    private const EDUCATION_NEC_CODES = [
+        '0110',
+        '0111',
+        '0112',
+        '0113',
+        '0114',
+    ];
+
+    private const REQUIRED_QUALIFICATION_LEVEL_CODES = [1, 2, 3, 4, 6, 7];
+
     private const MINIMUM_PREFIX_LENGTH = 5;
 
     /**
@@ -124,6 +134,7 @@ class MQRService
                     )] = [
                         'kod_institusi' => $institutionCode,
                         'kod_pengkhususan' => $specializationCode,
+                        'id_peringkat_kelulusan' => $mapping['qualification_level_id'],
                         'kategori' => $mapping['specialization']->KATEGORI,
                         'kod_mqa' => $mqr->kod_rujukan_akreditasi_penuh,
                     ];
@@ -211,7 +222,8 @@ class MQRService
      * @return array{
      *     institution_exact: Collection<string, Collection<int, array{record: object, normalized: string, priority: int}>>,
      *     institution_alias: Collection<string, Collection<int, array{record: object, normalized: string, priority: int}>>,
-     *     specialization_exact: Collection<string, object>
+     *     specialization_exact: Collection<string, object>,
+     *     qualification_level_codes?: Collection<int, int>
      * }
      */
     public function prepareReferenceData(Collection $institutions, Collection $specializations): array
@@ -262,14 +274,16 @@ class MQRService
      * @param  array{
      *     institution_exact: Collection,
      *     institution_alias: Collection,
-     *     specialization_exact: Collection
+     *     specialization_exact: Collection,
+     *     qualification_level_codes?: Collection
      * }  $references
      * @return array{
      *     success: bool,
      *     reason: string,
      *     institution: ?object,
      *     specialization: ?object,
-     *     institution_match_method: ?string
+     *     institution_match_method: ?string,
+     *     qualification_level_id: ?int
      * }
      */
     public function evaluateMapping(object $mqr, array $references): array
@@ -306,6 +320,10 @@ class MQRService
         }
 
         $success = $reasons === [];
+        $qualificationLevelId = $this->resolveQualificationLevelId(
+            $mqr,
+            $references
+        );
 
         return [
             'success' => $success,
@@ -315,7 +333,51 @@ class MQRService
             'institution' => $institutionResult['institution'],
             'specialization' => $specialization,
             'institution_match_method' => $institutionResult['method'],
+            'qualification_level_id' => $qualificationLevelId,
         ];
+    }
+
+    /**
+     * Dapatkan kod sebenar ref_peringkat_kelulusan berdasarkan medan API MQR.
+     *
+     * @param  array{qualification_level_codes?: Collection}  $references
+     */
+    private function resolveQualificationLevelId(
+        object $mqr,
+        array $references
+    ): ?int {
+        $level = trim((string) ($mqr->peringkat_kelayakan ?? ''));
+        $necCode = trim((string) ($mqr->kod_nec ?? ''));
+        $isEducationNec = in_array(
+            $necCode,
+            self::EDUCATION_NEC_CODES,
+            true
+        );
+
+        $referenceCode = match (true) {
+            in_array($level, ['3', '4', '6'], true) => $isEducationNec ? 1 : 2,
+            $level === '7' => $isEducationNec ? 3 : 4,
+            in_array($level, ['8', '9', '10'], true) => 6,
+            $level === '11' => 7,
+            default => null,
+        };
+
+        if ($referenceCode === null) {
+            return null;
+        }
+
+        $qualificationLevelCodes = $references['qualification_level_codes']
+            ?? null;
+
+        if (! $qualificationLevelCodes instanceof Collection) {
+            return null;
+        }
+
+        $qualificationLevelId = $qualificationLevelCodes->get($referenceCode);
+
+        return $qualificationLevelId === null
+            ? null
+            : (int) $qualificationLevelId;
     }
 
     /**
@@ -586,7 +648,8 @@ class MQRService
      * @return array{
      *     institution_exact: Collection,
      *     institution_alias: Collection,
-     *     specialization_exact: Collection
+     *     specialization_exact: Collection,
+     *     qualification_level_codes: Collection<int, int>
      * }
      */
     private function loadReferenceData(): array
@@ -605,7 +668,33 @@ class MQRService
             ->where('is_deleted', 0)
             ->get(['kod', 'DISKRIPSI', 'KATEGORI']);
 
-        return $this->prepareReferenceData($institutions, $specializations);
+        $qualificationLevelCodes = $connection
+            ->table($this->qualifiedTableName('ref_peringkat_kelulusan'))
+            ->where('is_deleted', 0)
+            ->whereIn('kod', self::REQUIRED_QUALIFICATION_LEVEL_CODES)
+            ->pluck('kod')
+            ->mapWithKeys(
+                fn (mixed $code): array => [(int) $code => (int) $code]
+            );
+        $missingQualificationLevelCodes = array_values(array_diff(
+            self::REQUIRED_QUALIFICATION_LEVEL_CODES,
+            $qualificationLevelCodes->keys()->all()
+        ));
+
+        if ($missingQualificationLevelCodes !== []) {
+            throw new \RuntimeException(sprintf(
+                'Kod ref_peringkat_kelulusan tidak ditemui atau telah dipadam: %s.',
+                implode(', ', $missingQualificationLevelCodes)
+            ));
+        }
+
+        $references = $this->prepareReferenceData(
+            $institutions,
+            $specializations
+        );
+        $references['qualification_level_codes'] = $qualificationLevelCodes;
+
+        return $references;
     }
 
     /**
@@ -615,6 +704,7 @@ class MQRService
      * @param  array<int, array{
      *     kod_institusi: string,
      *     kod_pengkhususan: string,
+     *     id_peringkat_kelulusan: ?int,
      *     kategori: mixed,
      *     kod_mqa: mixed
      * }>  $mappings
@@ -675,6 +765,7 @@ class MQRService
                         $updates[] = [
                             'kod' => $existingRow->kod,
                             'kod_mqa' => $mapping['kod_mqa'],
+                            'id_peringkat_kelulusan' => $mapping['id_peringkat_kelulusan'],
                             'tarikh_ubahsuai' => $updatedAt,
                         ];
                     }
@@ -706,7 +797,7 @@ class MQRService
     }
 
     /**
-     * @param  array<int, array{kod: mixed, kod_mqa: mixed, tarikh_ubahsuai: mixed}>  $updates
+     * @param  array<int, array{kod: mixed, kod_mqa: mixed, id_peringkat_kelulusan: ?int, tarikh_ubahsuai: mixed}>  $updates
      */
     private function bulkUpdateMappings(
         Connection $connection,
@@ -717,26 +808,47 @@ class MQRService
         $table = $grammar->wrapTable($this->mappingTableName());
         $primaryKey = $grammar->wrap('kod');
         $mqaCode = $grammar->wrap('kod_mqa');
+        $qualificationLevelId = $grammar->wrap('id_peringkat_kelulusan');
         $updatedColumn = $grammar->wrap('tarikh_ubahsuai');
         $caseStatements = [];
         $caseBindings = [];
+        $qualificationLevelCaseStatements = [];
+        $qualificationLevelCaseBindings = [];
         $ids = [];
 
         foreach ($updates as $update) {
             $caseStatements[] = 'when ? then ?';
             $caseBindings[] = $update['kod'];
             $caseBindings[] = $update['kod_mqa'];
+
+            if ($update['id_peringkat_kelulusan'] !== null) {
+                $qualificationLevelCaseStatements[] = 'when ? then ?';
+                $qualificationLevelCaseBindings[] = $update['kod'];
+                $qualificationLevelCaseBindings[] = $update['id_peringkat_kelulusan'];
+            }
+
             $ids[] = $update['kod'];
         }
 
+        $qualificationLevelExpression = $qualificationLevelCaseStatements === []
+            ? $qualificationLevelId
+            : sprintf(
+                'case %s %s else %s end',
+                $primaryKey,
+                implode(' ', $qualificationLevelCaseStatements),
+                $qualificationLevelId
+            );
+
         $idPlaceholders = implode(', ', array_fill(0, count($ids), '?'));
         $sql = sprintf(
-            'update %s set %s = case %s %s else %s end, %s = ? where %s in (%s)',
+            'update %s set %s = case %s %s else %s end, %s = %s, %s = ? where %s in (%s)',
             $table,
             $mqaCode,
             $primaryKey,
             implode(' ', $caseStatements),
             $mqaCode,
+            $qualificationLevelId,
+            $qualificationLevelExpression,
             $updatedColumn,
             $primaryKey,
             $idPlaceholders
@@ -744,7 +856,12 @@ class MQRService
 
         $connection->update(
             $sql,
-            [...$caseBindings, $updatedAt, ...$ids]
+            [
+                ...$caseBindings,
+                ...$qualificationLevelCaseBindings,
+                $updatedAt,
+                ...$ids,
+            ]
         );
     }
 
@@ -1162,6 +1279,7 @@ class MQRService
                             )] = [
                                 'kod_institusi' => $institutionCode,
                                 'kod_pengkhususan' => $specializationCode,
+                                'id_peringkat_kelulusan' => $mapping['qualification_level_id'],
                                 'kategori' => $mapping['specialization']->KATEGORI,
                                 'kod_mqa' => $mqr->kod_rujukan_akreditasi_penuh,
                             ];

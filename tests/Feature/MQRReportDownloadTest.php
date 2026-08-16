@@ -18,31 +18,55 @@ beforeEach(function () {
     config()->set('services.mqr.mapping_schema', null);
     DB::purge('mqr_mapping');
 
+    Schema::dropIfExists('mqr_data');
     Schema::create('mqr_data', function (Blueprint $table): void {
         $table->id();
         $table->string('kod_rujukan_akreditasi_penuh')->nullable();
         $table->string('id_institusi')->nullable();
         $table->string('nama_institusi')->nullable();
         $table->text('nama_kelayakan_bm')->nullable();
+        $table->string('kod_nec')->nullable();
+        $table->string('peringkat_kelayakan')->nullable();
     });
 
-    Schema::create('ref_institusi', function (Blueprint $table): void {
+    $createInstitutionTable = function (Blueprint $table): void {
         $table->string('KOD')->primary();
         $table->string('DISKRIPSI');
         $table->boolean('is_deleted')->default(false);
-    });
+    };
+    Schema::create('ref_institusi', $createInstitutionTable);
+    Schema::connection('mqr_mapping')->create(
+        'ref_institusi',
+        $createInstitutionTable
+    );
 
-    Schema::create('ref_pengkhususan', function (Blueprint $table): void {
+    $createSpecializationTable = function (Blueprint $table): void {
         $table->string('kod')->primary();
         $table->string('DISKRIPSI');
         $table->integer('KATEGORI')->nullable();
         $table->boolean('is_deleted')->default(false);
-    });
+    };
+    Schema::create('ref_pengkhususan', $createSpecializationTable);
+    Schema::connection('mqr_mapping')->create(
+        'ref_pengkhususan',
+        $createSpecializationTable
+    );
+
+    Schema::connection('mqr_mapping')->create(
+        'ref_peringkat_kelulusan',
+        function (Blueprint $table): void {
+            $table->integer('kod')->primary();
+            $table->string('diskripsi')->nullable();
+            $table->boolean('is_deleted')->default(false);
+        }
+    );
 
     $createMappingTable = function (Blueprint $table): void {
         $table->bigIncrements('kod');
         $table->string('kod_institusi');
         $table->string('kod_pengkhususan');
+        $table->integer('id_peringkat_kelulusan')->nullable();
+        $table->integer('peringkat_kelulusan')->nullable();
         $table->integer('kategori')->nullable();
         $table->string('kod_mqa')->nullable();
         $table->integer('status')->default(0);
@@ -65,24 +89,49 @@ beforeEach(function () {
         'DISKRIPSI' => 'UNIVERSITI SULTAN ZAINAL ABIDIN (UNISZA)',
         'is_deleted' => false,
     ]);
+    DB::connection('mqr_mapping')->table('ref_institusi')->insert([
+        'KOD' => '00038',
+        'DISKRIPSI' => 'UNIVERSITI SULTAN ZAINAL ABIDIN (UNISZA)',
+        'is_deleted' => false,
+    ]);
     DB::table('ref_pengkhususan')->insert([
         'kod' => 'P001',
         'DISKRIPSI' => 'Sarjana Muda Teknologi Maklumat',
         'KATEGORI' => 1,
         'is_deleted' => false,
     ]);
+    DB::connection('mqr_mapping')->table('ref_pengkhususan')->insert([
+        'kod' => 'P001',
+        'DISKRIPSI' => 'Sarjana Muda Teknologi Maklumat',
+        'KATEGORI' => 1,
+        'is_deleted' => false,
+    ]);
+    DB::connection('mqr_mapping')
+        ->table('ref_peringkat_kelulusan')
+        ->insert(array_map(
+            fn (int $code): array => [
+                'kod' => $code,
+                'diskripsi' => "Peringkat {$code}",
+                'is_deleted' => false,
+            ],
+            [1, 2, 3, 4, 6, 7]
+        ));
     DB::table('mqr_data')->insert([
         [
             'kod_rujukan_akreditasi_penuh' => 'MQA/FA0001',
             'id_institusi' => 'MQR001',
             'nama_institusi' => 'Universiti Sultan Zainal Abidin (UniSZA) (Kampus Gong Badak)',
             'nama_kelayakan_bm' => 'Sarjana Muda Teknologi Maklumat',
+            'kod_nec' => '0112',
+            'peringkat_kelayakan' => '7',
         ],
         [
             'kod_rujukan_akreditasi_penuh' => 'MQA/FA0002',
             'id_institusi' => 'MQR002',
             'nama_institusi' => '=INSTITUSI_TIDAK_WUJUD',
             'nama_kelayakan_bm' => 'Kelayakan Tidak Wujud',
+            'kod_nec' => '0210',
+            'peringkat_kelayakan' => '3',
         ],
     ]);
 });
@@ -123,6 +172,12 @@ it('only publishes Excel-compatible reports after every batch is complete', func
         ->and(DB::connection('mqr_mapping')
             ->table('padanan_institusi_pengkhususan')
             ->value('kod_mqa'))->toBe('MQA/FA0001')
+        ->and(DB::connection('mqr_mapping')
+            ->table('padanan_institusi_pengkhususan')
+            ->value('id_peringkat_kelulusan'))->toBe(3)
+        ->and(DB::connection('mqr_mapping')
+            ->table('padanan_institusi_pengkhususan')
+            ->value('peringkat_kelulusan'))->toBeNull()
         ->and(DB::table('padanan_institusi_pengkhususan')->count())->toBe(0);
 
     $content = Storage::disk('local')->get(
@@ -226,6 +281,8 @@ it('updates every active duplicate in the configured mapping database', function
                 'kod_pengkhususan' => 'P001',
                 'kategori' => 1,
                 'kod_mqa' => null,
+                'id_peringkat_kelulusan' => 1,
+                'peringkat_kelulusan' => 9,
                 'status' => 0,
                 'is_deleted' => 0,
                 'tarikh_cipta' => now(),
@@ -235,6 +292,8 @@ it('updates every active duplicate in the configured mapping database', function
                 'kod_pengkhususan' => 'P001',
                 'kategori' => 1,
                 'kod_mqa' => 'KOD/LAMA',
+                'id_peringkat_kelulusan' => 2,
+                'peringkat_kelulusan' => 8,
                 'status' => 0,
                 'is_deleted' => 0,
                 'tarikh_cipta' => now(),
@@ -253,6 +312,10 @@ it('updates every active duplicate in the configured mapping database', function
 
     expect($target->count())->toBe(2)
         ->and($target->where('kod_mqa', 'MQA/FA0001')->count())->toBe(2)
+        ->and((clone $target)->where('id_peringkat_kelulusan', 3)->count())
+        ->toBe(2)
+        ->and((clone $target)->orderBy('kod')->pluck('peringkat_kelulusan')->all())
+        ->toBe([9, 8])
         ->and(DB::table('padanan_institusi_pengkhususan')->count())->toBe(0);
 });
 
@@ -264,6 +327,8 @@ it('keeps a deleted mapping and inserts a new active mapping', function () {
             'kod_pengkhususan' => 'P001',
             'kategori' => 1,
             'kod_mqa' => 'KOD/ARKIB',
+            'id_peringkat_kelulusan' => 7,
+            'peringkat_kelulusan' => 4,
             'status' => 0,
             'is_deleted' => 1,
             'tarikh_cipta' => now(),
@@ -282,8 +347,107 @@ it('keeps a deleted mapping and inserts a new active mapping', function () {
     expect($target->count())->toBe(2)
         ->and((clone $target)->where('is_deleted', 1)->value('kod_mqa'))
         ->toBe('KOD/ARKIB')
+        ->and((clone $target)->where('is_deleted', 1)->value('id_peringkat_kelulusan'))
+        ->toBe(7)
         ->and((clone $target)->where('is_deleted', 0)->value('kod_mqa'))
-        ->toBe('MQA/FA0001');
+        ->toBe('MQA/FA0001')
+        ->and((clone $target)->where('is_deleted', 0)->value('id_peringkat_kelulusan'))
+        ->toBe(3)
+        ->and((clone $target)->where('is_deleted', 0)->value('peringkat_kelulusan'))
+        ->toBeNull();
+});
+
+it('keeps an existing qualification id when the MQR level has no mapping', function () {
+    DB::connection('mqr_mapping')
+        ->table('padanan_institusi_pengkhususan')
+        ->insert([
+            'kod_institusi' => '00038',
+            'kod_pengkhususan' => 'P001',
+            'id_peringkat_kelulusan' => 6,
+            'peringkat_kelulusan' => 3,
+            'kategori' => 1,
+            'kod_mqa' => 'KOD/LAMA',
+            'status' => 0,
+            'is_deleted' => 0,
+            'tarikh_cipta' => now(),
+        ]);
+    DB::table('mqr_data')
+        ->where('kod_rujukan_akreditasi_penuh', 'MQA/FA0001')
+        ->update(['peringkat_kelayakan' => '12']);
+    DB::table('mqr_data')
+        ->where('kod_rujukan_akreditasi_penuh', 'MQA/FA0002')
+        ->delete();
+
+    $reports = app(MQRReportService::class);
+    $run = $reports->startOrResume(null);
+    app(MQRService::class)->mapNextBatch($run->id, 250, $reports);
+
+    $mapping = DB::connection('mqr_mapping')
+        ->table('padanan_institusi_pengkhususan')
+        ->first();
+
+    expect($mapping->kod_mqa)->toBe('MQA/FA0001')
+        ->and($mapping->id_peringkat_kelulusan)->toBe(6)
+        ->and($mapping->peringkat_kelulusan)->toBe(3);
+});
+
+it('stores a null qualification id for a new mapping with an unmapped level', function () {
+    DB::table('mqr_data')
+        ->where('kod_rujukan_akreditasi_penuh', 'MQA/FA0001')
+        ->update(['peringkat_kelayakan' => '12']);
+    DB::table('mqr_data')
+        ->where('kod_rujukan_akreditasi_penuh', 'MQA/FA0002')
+        ->delete();
+
+    $reports = app(MQRReportService::class);
+    $run = $reports->startOrResume(null);
+    app(MQRService::class)->mapNextBatch($run->id, 250, $reports);
+
+    $mapping = DB::connection('mqr_mapping')
+        ->table('padanan_institusi_pengkhususan')
+        ->first();
+
+    expect($mapping->id_peringkat_kelulusan)->toBeNull()
+        ->and($mapping->peringkat_kelulusan)->toBeNull();
+});
+
+it('stores the qualification id through the full mapping flow', function () {
+    DB::table('mqr_data')
+        ->where('kod_rujukan_akreditasi_penuh', 'MQA/FA0002')
+        ->delete();
+
+    $response = app(MQRService::class)->mapAndSyncPadanan();
+    $mapping = DB::connection('mqr_mapping')
+        ->table('padanan_institusi_pengkhususan')
+        ->first();
+
+    expect($response['status'])->toBeTrue()
+        ->and($mapping->id_peringkat_kelulusan)->toBe(3)
+        ->and($mapping->peringkat_kelulusan)->toBeNull();
+});
+
+it('does not advance the run when a required qualification reference is missing', function () {
+    DB::connection('mqr_mapping')
+        ->table('ref_peringkat_kelulusan')
+        ->where('kod', 7)
+        ->delete();
+
+    $reports = app(MQRReportService::class);
+    $run = $reports->startOrResume(null);
+    $response = app(MQRService::class)->mapNextBatch(
+        $run->id,
+        250,
+        $reports
+    );
+    $run->refresh();
+
+    expect($response['status'])->toBeFalse()
+        ->and($response['message'])->toContain('ref_peringkat_kelulusan')
+        ->and($response['message'])->toContain('7')
+        ->and($run->processed_count)->toBe(0)
+        ->and($run->last_mqr_id)->toBe(0)
+        ->and(DB::connection('mqr_mapping')
+            ->table('padanan_institusi_pengkhususan')->count())->toBe(0);
 });
 
 it('does not advance the run when the target mapping connection fails', function () {
