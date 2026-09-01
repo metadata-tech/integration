@@ -89,4 +89,9 @@ return [
         'status_method' => env('ISCAF_STATUS_METHOD', 'POST'),
     ],
 
+    'myspp' => [
+        'url' => env('MYSPP_DOKUMEN_URL', 'http://10.29.58.50/myspp/api/espp_dokumen.php'),
+        'api_key' => env('MYSPP_DOKUMEN_TOKEN'),
+    ],
+
 ];

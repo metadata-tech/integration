@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\LpmController;
 use App\Http\Controllers\Api\MyGDXController;
 use App\Http\Controllers\Api\IscafController;
 use App\Http\Controllers\Api\JpnController;
+use App\Http\Controllers\Api\MysppController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -43,5 +44,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/iscaf/daftar', [IscafController::class, 'daftar']);
     Route::post('/iscaf/informasi', [IscafController::class, 'informasi']);
     Route::post('/iscaf/kemas-kini', [IscafController::class, 'kemasKini']);
+
+    // MySPP dokumen (binary proxy to 10.29.58.50)
+    Route::get('/myspp/dokumen', [MysppController::class, 'dokumen']);
 
 });
