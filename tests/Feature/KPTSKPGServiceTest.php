@@ -12,6 +12,32 @@ beforeEach(function (): void {
     Http::preventStrayRequests();
 });
 
+it('returns four temporary SKPG testing records for the configured IC', function () {
+    $result = app(KPTSKPGService::class)->callAPI('000116030974');
+
+    expect($result['status'])->toBe('200')
+        ->and($result['message'])->toContain('TOTAL ROW : 4')
+        ->and($result['data'])->toHaveCount(4)
+        ->and(array_column($result['data'], 'ic_no'))->toBe([
+            '000116030974',
+            '000116030974',
+            '000116030974',
+            '000116030974',
+        ])
+        ->and(array_column($result['data'], 'level_course_desc'))->toBe([
+            'Diploma',
+            'Sarjana Muda/Ijazah Pertama',
+            'Sarjana',
+            'Ph.D.',
+        ])
+        ->and(array_column($result['data'], 'status_pelajar'))->toBe([
+            'Tamat Pengajian',
+            'Tamat Pengajian',
+            'Berhenti - Sebab Peribadi',
+            'Aktif',
+        ]);
+});
+
 it('removes duplicate KPT records and updates the total row message', function () {
     $qualification = [
         'id_univ' => '18',
