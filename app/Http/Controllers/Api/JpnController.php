@@ -16,12 +16,16 @@ class JpnController extends BaseController
 
     public function semakMaklumat(Request $request)
     {
-        // Validasi input untuk memastikan 'no_kp' dihantar oleh client
+        // user_id ialah nombor kad pengenalan pengguna yang membuat semakan.
         $validated = $request->validate([
-            'no_kp' => 'required'
+            'no_kp' => ['required', 'digits:12'],
+            'user_id' => ['required', 'digits:12'],
         ]);
 
         // Panggil servis JPN dan pulangkan response
-        return $this->service->callAPI($validated['no_kp']);
+        return $this->service->callAPI(
+            $validated['no_kp'],
+            $validated['user_id']
+        );
     }
 }
