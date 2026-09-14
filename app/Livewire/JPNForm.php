@@ -9,12 +9,14 @@ class JPNForm extends Component
 {
     public $no_kp;
 
+    public $user_id;
+
     public $result = null;
 
     public function mount()
     {
-        ray("mount");
-        $this->no_kp = "021009031069";
+        $this->no_kp = '021009031069';
+        $this->user_id = '';
     }
 
     public function render()
@@ -24,12 +26,14 @@ class JPNForm extends Component
 
     public function process(JPNService $service)
     {
-        ray("call API");
+        $validated = $this->validate([
+            'no_kp' => ['required', 'digits:12'],
+            'user_id' => ['required', 'digits:12'],
+        ]);
 
-        $this->jpnService = $service;
-        $x = $this->jpnService->callAPI($this->no_kp);
-        ray($x);
-
-        $this->result = $x;
+        $this->result = $service->callAPI(
+            $validated['no_kp'],
+            $validated['user_id']
+        );
     }
 }
