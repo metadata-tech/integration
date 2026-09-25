@@ -31,6 +31,8 @@ Route::middleware([
      ** Integration Pages
      */
     Route::prefix('integrasi')->name('integrasi.')->group(function () {
+        Route::view('/mqr/gagal', 'integrasi.mqr-failures')->name('mqr.gagal');
+
         foreach (config('integrations') as $slug => $integration) {
             Route::view("/{$slug}", 'integrasi.show', [
                 'slug' => $slug,

@@ -35,8 +35,8 @@
                     <a href="{{ route($item['route']) }}"
                        @class([
                            'block rounded-lg px-3 py-2 text-sm transition',
-                           'bg-primary-50 font-medium text-primary-700' => request()->routeIs($item['route']),
-                           'text-gray-700 hover:bg-washed-100 hover:text-gray-900' => ! request()->routeIs($item['route']),
+                           'bg-primary-50 font-medium text-primary-700' => request()->routeIs($item['route'], $item['route'].'.*'),
+                           'text-gray-700 hover:bg-washed-100 hover:text-gray-900' => ! request()->routeIs($item['route'], $item['route'].'.*'),
                        ])>
                         {{ $item['label'] }}
                     </a>

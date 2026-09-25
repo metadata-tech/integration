@@ -4,12 +4,14 @@ namespace App\Services;
 
 use App\Models\APILog;
 use App\Models\MqrData;
+use App\Models\MqrMappingFailure;
 use App\Models\MqrMappingRun;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -119,6 +121,7 @@ class MQRService
 
             $reportRows = [];
             $successfulMappings = [];
+            $failureRows = [];
 
             foreach ($mqrData as $mqr) {
                 $stats['processed']++;
@@ -147,6 +150,11 @@ class MQRService
 
                 $stats['gagal']++;
                 $stats['latest_gagal'][] = "{$mqr->nama_institusi} - {$mqr->nama_kelayakan_bm} ({$mapping['reason']})";
+                $failureRows[] = $this->failureRecord($run->id, $mqr, $mapping);
+            }
+
+            if ($failureRows !== []) {
+                MqrMappingFailure::query()->insert($failureRows);
             }
 
             $this->saveMappings(array_values($successfulMappings));
@@ -1303,5 +1311,417 @@ class MQRService
                 'message' => 'Ralat sistem: '.$e->getMessage(),
             ];
         }
+    }
+
+    /**
+     * @param  array{success: bool, reason: string}  $mapping
+     * @return array<string, mixed>
+     */
+    private function failureRecord(string $runId, object $mqr, array $mapping): array
+    {
+        $reason = $mapping['reason'];
+        $now = now();
+
+        return [
+            'run_id' => $runId,
+            'mqr_data_id' => (int) $mqr->id,
+            'kod_mqa' => $mqr->kod_rujukan_akreditasi_penuh,
+            'nama_institusi' => $mqr->nama_institusi,
+            'nama_kelayakan' => $mqr->nama_kelayakan_bm,
+            'reason' => $reason,
+            'missing_institution' => str_contains(
+                $reason,
+                'Tiada institusi yang sepadan'
+            ) ? 1 : 0,
+            'missing_specialization' => (
+                str_contains($reason, 'Tiada pengkhususan yang sepadan')
+                || str_contains($reason, 'Nama kelayakan BM tidak dibekalkan')
+            ) ? 1 : 0,
+            'ambiguous_institution' => str_contains(
+                $reason,
+                'Lebih daripada satu institusi'
+            ) ? 1 : 0,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ];
+    }
+
+    /**
+     * Nilai semula data MQR semasa dan ganti senarai gagal larian terakhir.
+     * Padanan yang sudah berjaya tidak ditulis semula.
+     *
+     * @return array{status: bool, message: string, count: int}
+     */
+    public function rebuildFailureList(): array
+    {
+        $run = MqrMappingRun::query()
+            ->completed()
+            ->latest('completed_at')
+            ->first();
+
+        if ($run === null) {
+            throw new \RuntimeException(
+                'Tiada padanan selesai. Jalankan Automasi Padanan dahulu.'
+            );
+        }
+
+        $references = $this->loadReferenceData();
+        $count = 0;
+
+        DB::transaction(function () use ($run, $references, &$count): void {
+            MqrMappingFailure::query()
+                ->where('run_id', $run->id)
+                ->delete();
+
+            MqrData::query()
+                ->orderBy('id')
+                ->chunkById(200, function (Collection $records) use (
+                    $run,
+                    $references,
+                    &$count
+                ): void {
+                    $rows = [];
+
+                    foreach ($records as $mqr) {
+                        $mapping = $this->evaluateMapping($mqr, $references);
+
+                        if ($mapping['success']) {
+                            continue;
+                        }
+
+                        $rows[] = $this->failureRecord($run->id, $mqr, $mapping);
+                    }
+
+                    if ($rows !== []) {
+                        MqrMappingFailure::query()->insert($rows);
+                        $count += count($rows);
+                    }
+                });
+        });
+
+        return [
+            'status' => true,
+            'count' => $count,
+            'message' => "Senarai gagal dikemas kini. {$count} rekod gagal.",
+        ];
+    }
+
+    /**
+     * Daftar nama yang tiada ke jadual rujukan, kemudian padan semula rekod terpilih.
+     *
+     * @param  array<int, mixed>  $failureIds
+     * @return array{status: bool, message: string}
+     */
+    public function registerMissingReferences(array $failureIds, string $kind): array
+    {
+        if (! in_array($kind, ['institution', 'specialization'], true)) {
+            throw new \RuntimeException('Jenis daftar rujukan tidak sah.');
+        }
+
+        $run = MqrMappingRun::query()
+            ->completed()
+            ->latest('completed_at')
+            ->first();
+
+        if ($run === null) {
+            throw new \RuntimeException(
+                'Tiada padanan selesai. Jalankan Automasi Padanan dahulu.'
+            );
+        }
+
+        $ids = array_values(array_unique(array_map(
+            intval(...),
+            $failureIds
+        )));
+        $failures = MqrMappingFailure::query()
+            ->where('run_id', $run->id)
+            ->whereIn('id', $ids)
+            ->get();
+        $eligible = $failures->filter(
+            fn (MqrMappingFailure $failure): bool => $kind === 'institution'
+                ? $failure->allowsInstitutionRegistration()
+                : $failure->allowsSpecializationRegistration()
+        );
+
+        if ($eligible->isEmpty()) {
+            throw new \RuntimeException(
+                'Tiada rekod terpilih yang boleh didaftarkan untuk tindakan ini.'
+            );
+        }
+
+        $registered = $this->insertMissingReferences($eligible, $kind);
+        $rematch = $this->rematchFailures($run->id, $eligible->pluck('mqr_data_id')->all());
+
+        return [
+            'status' => true,
+            'message' => sprintf(
+                '%d rujukan didaftarkan. %d rekod dipadankan. %d rekod masih gagal.',
+                $registered,
+                $rematch['matched'],
+                $rematch['failed']
+            ),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, MqrMappingFailure>  $failures
+     */
+    private function insertMissingReferences(Collection $failures, string $kind): int
+    {
+        $isInstitution = $kind === 'institution';
+        $table = $isInstitution ? 'ref_institusi' : 'ref_pengkhususan';
+        $connection = $this->mappingConnection();
+        $qualifiedTable = $this->qualifiedTableName($table);
+        $columns = $this->referenceColumns($qualifiedTable);
+        $codeColumn = $this->requireColumn(
+            $columns,
+            $isInstitution ? 'KOD' : 'kod'
+        );
+        $nameColumn = $this->requireColumn($columns, 'DISKRIPSI');
+        $references = $this->loadReferenceData();
+        $existingKeys = $isInstitution
+            ? $references['institution_alias']->keys()
+            : $references['specialization_exact']->keys();
+        $names = [];
+
+        foreach ($failures as $failure) {
+            $rawName = trim((string) (
+                $isInstitution
+                    ? $failure->nama_institusi
+                    : $failure->nama_kelayakan
+            ));
+            $key = $isInstitution
+                ? $this->normalizeText($rawName)
+                : $this->normalizeQualificationText($rawName);
+
+            if ($key === '' || $existingKeys->contains($key) || isset($names[$key])) {
+                continue;
+            }
+
+            $names[$key] = $rawName;
+        }
+
+        if ($names === []) {
+            return 0;
+        }
+
+        $deletedColumn = $this->optionalColumn($columns, 'is_deleted');
+        $approvedColumn = $this->optionalColumn($columns, 'SAH_YT');
+        $rows = [];
+        $nextCode = $this->nextReferenceCode(
+            $connection,
+            $qualifiedTable,
+            $codeColumn,
+            $isInstitution
+        );
+
+        foreach ($names as $name) {
+            $row = [
+                $codeColumn => $nextCode,
+                $nameColumn => $name,
+            ];
+
+            if ($deletedColumn !== null) {
+                $row[$deletedColumn] = 0;
+            }
+
+            if ($approvedColumn !== null) {
+                $row[$approvedColumn] = 'Y';
+            }
+
+            $this->assertReferenceRowAllowed($columns, $row);
+            $rows[] = $row;
+            $nextCode = $this->incrementReferenceCode($nextCode, $isInstitution);
+        }
+
+        $connection->table($qualifiedTable)->insert($rows);
+
+        return count($rows);
+    }
+
+    /**
+     * @param  array<int, int>  $mqrDataIds
+     * @return array{matched: int, failed: int}
+     */
+    private function rematchFailures(string $runId, array $mqrDataIds): array
+    {
+        $records = MqrData::query()
+            ->whereIn('id', $mqrDataIds)
+            ->get();
+        $references = $this->loadReferenceData();
+        $successfulMappings = [];
+        $matchedIds = [];
+        $failed = 0;
+
+        foreach ($records as $mqr) {
+            $mapping = $this->evaluateMapping($mqr, $references);
+
+            if ($mapping['success']) {
+                $institutionCode = (string) $mapping['institution']->KOD;
+                $specializationCode = (string) $mapping['specialization']->kod;
+                $successfulMappings[$this->mappingPairKey(
+                    $institutionCode,
+                    $specializationCode
+                )] = [
+                    'kod_institusi' => $institutionCode,
+                    'kod_pengkhususan' => $specializationCode,
+                    'id_peringkat_kelulusan' => $mapping['qualification_level_id'],
+                    'kategori' => $mapping['specialization']->KATEGORI,
+                    'kod_mqa' => $mqr->kod_rujukan_akreditasi_penuh,
+                ];
+                $matchedIds[] = (int) $mqr->id;
+
+                continue;
+            }
+
+            $failed++;
+            $replacement = $this->failureRecord($runId, $mqr, $mapping);
+            unset($replacement['created_at']);
+            MqrMappingFailure::query()
+                ->where('run_id', $runId)
+                ->where('mqr_data_id', $mqr->id)
+                ->update($replacement);
+        }
+
+        $this->saveMappings(array_values($successfulMappings));
+
+        if ($matchedIds !== []) {
+            MqrMappingFailure::query()
+                ->where('run_id', $runId)
+                ->whereIn('mqr_data_id', $matchedIds)
+                ->delete();
+        }
+
+        return [
+            'matched' => count($matchedIds),
+            'failed' => $failed,
+        ];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function referenceColumns(string $table): array
+    {
+        $connection = $this->mappingConnection();
+
+        if (! str_contains($table, '.')) {
+            return Schema::connection($connection->getName())->getColumns($table);
+        }
+
+        [$schema, $name] = explode('.', $table, 2);
+        $grammar = $connection->getSchemaGrammar();
+
+        return $connection->getPostProcessor()->processColumns(
+            $connection->select(
+                $grammar->compileColumns(
+                    $schema,
+                    $connection->getTablePrefix().$name
+                )
+            )
+        );
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $columns
+     */
+    private function requireColumn(array $columns, string $wanted): string
+    {
+        $column = $this->optionalColumn($columns, $wanted);
+
+        if ($column === null) {
+            throw new \RuntimeException(
+                "Lajur {$wanted} tidak dijumpai pada jadual rujukan."
+            );
+        }
+
+        return $column;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $columns
+     */
+    private function optionalColumn(array $columns, string $wanted): ?string
+    {
+        foreach ($columns as $column) {
+            if (strcasecmp((string) $column['name'], $wanted) === 0) {
+                return (string) $column['name'];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $columns
+     * @param  array<string, mixed>  $row
+     */
+    private function assertReferenceRowAllowed(array $columns, array $row): void
+    {
+        $missing = [];
+
+        foreach ($columns as $column) {
+            $name = (string) $column['name'];
+
+            if (array_key_exists($name, $row)) {
+                continue;
+            }
+
+            if (($column['auto_increment'] ?? false) === true) {
+                continue;
+            }
+
+            if (($column['nullable'] ?? false) === true) {
+                continue;
+            }
+
+            if (array_key_exists('default', $column) && $column['default'] !== null) {
+                continue;
+            }
+
+            $missing[] = $name;
+        }
+
+        if ($missing !== []) {
+            throw new \RuntimeException(
+                'Jadual rujukan memerlukan lajur wajib yang tidak diisi: '
+                .implode(', ', $missing).'.'
+            );
+        }
+    }
+
+    private function nextReferenceCode(
+        Connection $connection,
+        string $table,
+        string $column,
+        bool $pad
+    ): string {
+        $width = $pad ? 5 : 1;
+        $max = 0;
+
+        foreach ($connection->table($table)->pluck($column) as $code) {
+            $code = (string) $code;
+
+            if (preg_match('/\A\d+\z/', $code) !== 1) {
+                continue;
+            }
+
+            $max = max($max, (int) $code);
+
+            if ($pad) {
+                $width = max($width, strlen($code));
+            }
+        }
+
+        $next = (string) ($max + 1);
+
+        return $pad ? str_pad($next, $width, '0', STR_PAD_LEFT) : $next;
+    }
+
+    private function incrementReferenceCode(string $code, bool $pad): string
+    {
+        $next = (string) (((int) $code) + 1);
+
+        return $pad ? str_pad($next, strlen($code), '0', STR_PAD_LEFT) : $next;
     }
 }
