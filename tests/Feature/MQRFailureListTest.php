@@ -8,9 +8,11 @@ use App\Services\MQRService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
 beforeEach(function () {
+    Storage::fake('local');
     config()->set('services.mqr.mapping_connection', 'mqr_mapping');
     config()->set('services.mqr.mapping_schema', null);
     DB::purge('mqr_mapping');
@@ -29,12 +31,18 @@ beforeEach(function () {
     $institution = function (Blueprint $table): void {
         $table->string('KOD')->primary();
         $table->string('DISKRIPSI');
+        $table->string('KUMPULAN_INSTITUSI')->nullable();
+        $table->string('JENIS_INSTITUSI')->nullable();
+        $table->dateTime('TARIKH_CIPTA')->nullable();
+        $table->dateTime('TARIKH_UBAHSUAI')->nullable();
         $table->boolean('is_deleted')->default(false);
     };
     $specialization = function (Blueprint $table): void {
         $table->string('kod')->primary();
         $table->string('DISKRIPSI');
         $table->integer('KATEGORI')->nullable();
+        $table->dateTime('TARIKH_CIPTA')->nullable();
+        $table->dateTime('TARIKH_UBAHSUAI')->nullable();
         $table->boolean('is_deleted')->default(false);
     };
 
@@ -61,8 +69,33 @@ beforeEach(function () {
             $table->boolean('is_deleted')->default(false);
             $table->timestamp('tarikh_cipta')->nullable();
             $table->timestamp('tarikh_ubahsuai')->nullable();
+            $table->integer('id_pencipta')->nullable();
+            $table->integer('id_pengubahsuai')->nullable();
         }
     );
+    Schema::connection('mqr_mapping')->create('mqr_reference_registrations', function (Blueprint $table): void {
+        $table->id();
+        $table->string('run_id')->nullable();
+        $table->string('jenis');
+        $table->string('kod');
+        $table->text('nama');
+        $table->string('kumpulan_institusi')->nullable();
+        $table->integer('kategori')->nullable();
+        $table->timestamp('created_at')->nullable();
+    });
+    Schema::connection('mqr_mapping')->create('mqr_mapping_duplicate_audits', function (Blueprint $table): void {
+        $table->id();
+        $table->string('run_id')->nullable();
+        $table->string('kod_mqa');
+        $table->integer('kod_dikekalkan');
+        $table->integer('kod_dinyahaktifkan');
+        $table->string('kod_institusi_lama')->nullable();
+        $table->string('kod_pengkhususan_lama')->nullable();
+        $table->string('kod_institusi_akhir')->nullable();
+        $table->string('kod_pengkhususan_akhir')->nullable();
+        $table->string('hasil');
+        $table->timestamp('created_at')->nullable();
+    });
 
     DB::connection('mqr_mapping')->table('ref_institusi')->insert([
         'KOD' => '00038',
@@ -91,148 +124,52 @@ afterEach(function () {
     DB::purge('mqr_mapping');
 });
 
-it('lists failed mappings and filters them by reason', function () {
+it('keeps records with missing source fields in the failure list', function () {
     DB::table('mqr_data')->insert([
-        [
-            'kod_rujukan_akreditasi_penuh' => 'MQA/INST',
-            'nama_institusi' => 'Universiti Tiada Dalam Rujukan',
-            'nama_kelayakan_bm' => 'Sarjana Muda Teknologi Maklumat',
-        ],
-        [
-            'kod_rujukan_akreditasi_penuh' => 'MQA/SPEC',
-            'nama_institusi' => 'Universiti Sultan Zainal Abidin (UniSZA)',
-            'nama_kelayakan_bm' => 'Kelayakan Tiada Dalam Rujukan',
-        ],
-        [
-            'kod_rujukan_akreditasi_penuh' => 'MQA/BOTH',
-            'nama_institusi' => 'Institusi Lain Tiada',
-            'nama_kelayakan_bm' => 'Kelayakan Lain Tiada',
-        ],
+        'kod_rujukan_akreditasi_penuh' => 'MQA/INCOMPLETE',
+        'nama_institusi' => null,
+        'nama_kelayakan_bm' => null,
     ]);
 
     $reports = app(MQRReportService::class);
     $run = $reports->startOrResume(null);
     app(MQRService::class)->mapNextBatch($run->id, 50, $reports);
 
-    expect(MqrMappingFailure::query()->count())->toBe(3);
+    expect(MqrMappingFailure::query()->count())->toBe(1)
+        ->and(MqrMappingFailure::query()->first()->reason)->toContain('Nama institusi tidak dibekalkan');
 
-    Livewire::test(MQRFailureList::class)
-        ->assertSee('Universiti Tiada Dalam Rujukan')
-        ->assertSee('Kelayakan Tiada Dalam Rujukan')
-        ->set('reason', 'institution')
-        ->assertSee('Universiti Tiada Dalam Rujukan')
-        ->assertDontSee('Kelayakan Tiada Dalam Rujukan')
-        ->assertDontSee('Institusi Lain Tiada')
-        ->set('reason', 'specialization')
-        ->assertSee('Kelayakan Tiada Dalam Rujukan')
-        ->assertDontSee('Universiti Tiada Dalam Rujukan')
-        ->set('search', 'MQA/BOTH')
-        ->set('reason', '')
-        ->assertSee('Institusi Lain Tiada')
-        ->assertDontSee('Universiti Tiada Dalam Rujukan');
+    Livewire::test(MQRFailureList::class)->assertSee('MQA/INCOMPLETE');
 });
 
-it('registers one shared institution and rematches the selected records', function () {
-    DB::table('mqr_data')->insert([
-        [
-            'kod_rujukan_akreditasi_penuh' => 'MQA/A',
-            'nama_institusi' => 'Universiti Baharu Bersama',
-            'nama_kelayakan_bm' => 'Sarjana Muda Teknologi Maklumat',
-            'peringkat_kelayakan' => '7',
-            'kod_nec' => '0210',
-        ],
-        [
-            'kod_rujukan_akreditasi_penuh' => 'MQA/B',
-            'nama_institusi' => 'Universiti Baharu Bersama',
-            'nama_kelayakan_bm' => 'Sarjana Muda Teknologi Maklumat',
-            'peringkat_kelayakan' => '7',
-            'kod_nec' => '0210',
-        ],
-    ]);
-
-    $reports = app(MQRReportService::class);
-    $run = $reports->startOrResume(null);
-    app(MQRService::class)->mapNextBatch($run->id, 50, $reports);
-    $ids = MqrMappingFailure::query()->pluck('id')->all();
-
-    Livewire::test(MQRFailureList::class)
-        ->set('selected', $ids)
-        ->call('registerInstitutions')
-        ->assertSee('1 rujukan didaftarkan. 2 rekod dipadankan. 0 rekod masih gagal.');
-
-    expect(DB::connection('mqr_mapping')->table('ref_institusi')->count())->toBe(2)
-        ->and(DB::connection('mqr_mapping')->table('ref_institusi')->where('KOD', '00039')->value('DISKRIPSI'))
-        ->toBe('Universiti Baharu Bersama')
-        ->and(DB::connection('mqr_mapping')->table('padanan_institusi_pengkhususan')->count())->toBe(1)
-        ->and(DB::connection('mqr_mapping')->table('padanan_institusi_pengkhususan')->value('kod_institusi'))
-        ->toBe('00039')
-        ->and(MqrMappingFailure::query()->count())->toBe(0);
-});
-
-it('does not register an ambiguous institution', function () {
-    DB::connection('mqr_mapping')->table('ref_institusi')->insert([
-        'KOD' => '00039',
-        'DISKRIPSI' => 'KOLEJ SAMA',
-        'is_deleted' => false,
-    ]);
-    DB::connection('mqr_mapping')->table('ref_institusi')->where('KOD', '00038')->update([
-        'DISKRIPSI' => 'KOLEJ SAMA',
-    ]);
-    DB::table('mqr_data')->insert([
-        'kod_rujukan_akreditasi_penuh' => 'MQA/AMB',
-        'nama_institusi' => 'Kolej Sama',
-        'nama_kelayakan_bm' => 'Sarjana Muda Teknologi Maklumat',
-    ]);
-
-    $reports = app(MQRReportService::class);
-    $run = $reports->startOrResume(null);
-    app(MQRService::class)->mapNextBatch($run->id, 50, $reports);
-    $failure = MqrMappingFailure::query()->first();
-
-    expect($failure->ambiguous_institution)->toBeTrue();
-
-    Livewire::test(MQRFailureList::class)
-        ->set('selected', [$failure->id])
-        ->call('registerInstitutions')
-        ->assertSee('Tiada rekod terpilih yang boleh didaftarkan');
-
-    expect(DB::connection('mqr_mapping')->table('ref_institusi')->count())->toBe(2)
-        ->and(DB::connection('mqr_mapping')->table('padanan_institusi_pengkhususan')->count())->toBe(0);
-});
-
-it('rejects registration when a reference column is required', function () {
-    DB::table('mqr_data')->insert([
-        'kod_rujukan_akreditasi_penuh' => 'MQA/JENIS',
-        'nama_institusi' => 'Universiti Tanpa Jenis',
-        'nama_kelayakan_bm' => 'Sarjana Muda Teknologi Maklumat',
-    ]);
-
-    $reports = app(MQRReportService::class);
-    $run = $reports->startOrResume(null);
-    app(MQRService::class)->mapNextBatch($run->id, 50, $reports);
-
+it('pauses automatic registration when a required reference column cannot be populated', function () {
     Schema::connection('mqr_mapping')->drop('ref_institusi');
     Schema::connection('mqr_mapping')->create('ref_institusi', function (Blueprint $table): void {
         $table->string('KOD')->primary();
         $table->string('DISKRIPSI');
-        $table->string('JENIS_INSTITUSI');
+        $table->string('KUMPULAN_INSTITUSI')->nullable();
+        $table->string('JENIS_INSTITUSI')->nullable();
+        $table->string('NEGARA');
+        $table->dateTime('TARIKH_CIPTA')->nullable();
+        $table->dateTime('TARIKH_UBAHSUAI')->nullable();
         $table->boolean('is_deleted')->default(false);
     });
     DB::connection('mqr_mapping')->table('ref_institusi')->insert([
-        'KOD' => '00038',
-        'DISKRIPSI' => 'UNIVERSITI SULTAN ZAINAL ABIDIN (UNISZA)',
-        'JENIS_INSTITUSI' => '1',
-        'is_deleted' => false,
+        'KOD' => '00038', 'DISKRIPSI' => 'UNIVERSITI SULTAN ZAINAL ABIDIN (UNISZA)',
+        'JENIS_INSTITUSI' => '1', 'NEGARA' => '130', 'is_deleted' => 0,
+    ]);
+    DB::table('mqr_data')->insert([
+        'kod_rujukan_akreditasi_penuh' => 'MQA/NEW',
+        'nama_institusi' => 'Institusi Baharu',
+        'nama_kelayakan_bm' => 'Diploma Baharu',
     ]);
 
-    $ids = MqrMappingFailure::query()->pluck('id')->all();
+    $reports = app(MQRReportService::class);
+    $run = $reports->startOrResume(null);
+    $result = app(MQRService::class)->mapNextBatch($run->id, 50, $reports);
 
-    Livewire::test(MQRFailureList::class)
-        ->set('selected', $ids)
-        ->call('registerInstitutions')
-        ->assertSee('JENIS_INSTITUSI');
-
-    expect(DB::connection('mqr_mapping')->table('ref_institusi')->count())->toBe(1);
+    expect($result['status'])->toBeFalse()
+        ->and($result['message'])->toContain('NEGARA')
+        ->and($run->fresh()->processed_count)->toBe(0);
 });
 
 it('shows the failure page from the MQR menu', function () {

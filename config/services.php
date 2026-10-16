@@ -66,7 +66,7 @@ return [
     ],
 
     'mygdx' => [
-        'subsystem_code' => env('MYGDX_SUBSYSTEM_CODE', 'ESPP_STG'),
+        'subsystem_code' => env('MYGDX_SUBSYSTEM_CODE', 'ESPP'),
     ],
     
     'mqr' => [

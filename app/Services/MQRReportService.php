@@ -7,6 +7,7 @@ use App\Models\MqrMappingRun;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -22,7 +23,9 @@ class MQRReportService
 
     private const OPERATION_LOCK_SECONDS = 300;
 
-    private const REPORT_TYPES = ['all', 'success', 'failure'];
+    private const MAPPING_REPORT_TYPES = ['all', 'success', 'failure'];
+
+    private const REPORT_TYPES = ['all', 'success', 'failure', 'references', 'duplicates'];
 
     private const HEADERS = [
         'Bil.',
@@ -163,7 +166,7 @@ class MQRReportService
             }
         }
 
-        foreach (self::REPORT_TYPES as $type) {
+        foreach (self::MAPPING_REPORT_TYPES as $type) {
             $this->atomicPut(
                 $this->partPath($run, $batchNumber, $type),
                 $this->encodeCsvRows($rowsByType[$type])
@@ -197,7 +200,7 @@ class MQRReportService
             $run->update(['status' => MqrMappingRun::STATUS_FINALIZING]);
         }
 
-        foreach (self::REPORT_TYPES as $type) {
+        foreach (self::MAPPING_REPORT_TYPES as $type) {
             $stream = fopen('php://temp/maxmemory:5242880', 'w+b');
 
             if ($stream === false) {
@@ -236,6 +239,8 @@ class MQRReportService
             }
         }
 
+        $this->publishAuditReports($run);
+
         foreach (self::REPORT_TYPES as $type) {
             if (! $this->disk()->exists($this->finalPath($run, $type))) {
                 throw new RuntimeException(
@@ -254,6 +259,47 @@ class MQRReportService
         $this->disk()->deleteDirectory($run->report_path.'/parts');
 
         return $run->fresh();
+    }
+
+    private function publishAuditReports(MqrMappingRun $run): void
+    {
+        $connection = DB::connection(config('services.mqr.mapping_connection', 'mqr_mapping'));
+        $schema = trim((string) config('services.mqr.mapping_schema'));
+        $table = fn (string $name): string => $schema === '' ? $name : $schema.'.'.$name;
+
+        $connection->table($table('mqr_mapping_duplicate_audits'))
+            ->whereNull('run_id')->update(['run_id' => $run->id]);
+        $connection->table($table('mqr_mapping_duplicate_audits'))
+            ->where('run_id', $run->id)->where('hasil', 'MENUNGGU_PADANAN')
+            ->update(['hasil' => 'PADANAN_GAGAL']);
+
+        $references = $connection->table($table('mqr_reference_registrations'))
+            ->where('run_id', $run->id)->orderBy('id')->get();
+        $referenceRows = [[
+            'Bil.', 'Jenis', 'Kod Rujukan', 'Nama', 'Kumpulan Institusi', 'Kategori',
+        ]];
+        foreach ($references as $reference) {
+            $referenceRows[] = [count($referenceRows), $reference->jenis, $reference->kod,
+                $reference->nama, $reference->kumpulan_institusi, $reference->kategori];
+        }
+
+        $duplicates = $connection->table($table('mqr_mapping_duplicate_audits'))
+            ->where('run_id', $run->id)->orderBy('kod_mqa')->orderBy('kod_dinyahaktifkan')->get();
+        $duplicateRows = [[
+            'Bil.', 'Kod MQA', 'ID Dikekalkan', 'ID Dinyahaktifkan',
+            'Kod Institusi Lama', 'Kod Pengkhususan Lama',
+            'Kod Institusi Akhir', 'Kod Pengkhususan Akhir', 'Hasil',
+        ]];
+        foreach ($duplicates as $duplicate) {
+            $duplicateRows[] = [count($duplicateRows), $duplicate->kod_mqa,
+                $duplicate->kod_dikekalkan, $duplicate->kod_dinyahaktifkan,
+                $duplicate->kod_institusi_lama, $duplicate->kod_pengkhususan_lama,
+                $duplicate->kod_institusi_akhir, $duplicate->kod_pengkhususan_akhir,
+                $duplicate->hasil];
+        }
+
+        $this->atomicPut($this->finalPath($run, 'references'), "\xEF\xBB\xBF".$this->encodeCsvRows($referenceRows));
+        $this->atomicPut($this->finalPath($run, 'duplicates'), "\xEF\xBB\xBF".$this->encodeCsvRows($duplicateRows));
     }
 
     public function markFailed(MqrMappingRun $run, string $message): void
@@ -280,7 +326,7 @@ class MQRReportService
             ->limit($limit)
             ->get()
             ->filter(
-                fn (MqrMappingRun $run): bool => collect(self::REPORT_TYPES)
+                fn (MqrMappingRun $run): bool => collect(self::MAPPING_REPORT_TYPES)
                     ->every(
                         fn (string $type): bool => $this->disk()
                             ->exists($this->finalPath($run, $type))
@@ -296,6 +342,11 @@ class MQRReportService
      */
     public function state(MqrMappingRun $run): array
     {
+        $connection = DB::connection(config('services.mqr.mapping_connection', 'mqr_mapping'));
+        $schema = trim((string) config('services.mqr.mapping_schema'));
+        $table = fn (string $name): string => $schema === '' ? $name : $schema.'.'.$name;
+        $duplicates = $connection->table($table('mqr_mapping_duplicate_audits'))->where('run_id', $run->id);
+
         return [
             'id' => $run->id,
             'status' => $run->status,
@@ -303,6 +354,10 @@ class MQRReportService
             'processed' => $run->processed_count,
             'berjaya' => $run->success_count,
             'gagal' => $run->failure_count,
+            'kod_mqa_pendua' => (clone $duplicates)->distinct()->count('kod_mqa'),
+            'rekod_dinyahaktifkan' => (clone $duplicates)->count(),
+            'rujukan_baharu' => $connection->table($table('mqr_reference_registrations'))->where('run_id', $run->id)->count(),
+            'ada_laporan_audit' => $this->disk()->exists($this->finalPath($run, 'duplicates')),
             'started_at' => $run->created_at?->format('d/m/Y H:i:s'),
             'completed_at' => $run->completed_at?->format('d/m/Y H:i:s'),
         ];
@@ -355,6 +410,8 @@ class MQRReportService
         return match ($type) {
             'success' => 'padanan_berjaya.csv',
             'failure' => 'padanan_gagal.csv',
+            'references' => 'rujukan_baharu.csv',
+            'duplicates' => 'kod_mqa_pendua.csv',
             default => 'laporan_lengkap.csv',
         };
     }
@@ -369,6 +426,8 @@ class MQRReportService
         return match ($type) {
             'success' => "senarai_mqr_berjaya_dipadan_{$timestamp}.csv",
             'failure' => "senarai_mqr_gagal_dipadan_{$timestamp}.csv",
+            'references' => "senarai_rujukan_baharu_{$timestamp}.csv",
+            'duplicates' => "senarai_kod_mqa_pendua_{$timestamp}.csv",
             default => "laporan_padanan_mqr_{$timestamp}.csv",
         };
     }

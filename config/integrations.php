@@ -90,6 +90,16 @@ return [
         'component' => 'muet-form',
         'code' => 'GDX',
         'health_url' => 'https://spp.mygdx.gov.my',
+        'log_input_contains' => '<iden:serviceCode>MPM-SSKSM-R-MPMFikMUET</iden:serviceCode>',
+    ],
+    'mygdx-stpm' => [
+        'label' => 'MyGDX STPM',
+        'title' => 'Integrasi MyGDX STPM',
+        'description' => 'Semakan keputusan STPM melalui perkhidmatan MyGDX.',
+        'component' => 'stpm-form',
+        'code' => 'GDX',
+        'health_url' => 'https://spp.mygdx.gov.my',
+        'log_input_contains' => '<iden:serviceCode>MPM-SSKSM-R-MPMFikSTPM</iden:serviceCode>',
     ],
     'mqr' => [
         'label' => 'MQR',

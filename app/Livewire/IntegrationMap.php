@@ -52,7 +52,7 @@ class IntegrationMap extends Component
             ->where('created_at', '>=', now()->subMinutes(self::LOG_WINDOW_MINUTES))
             ->whereNotNull('url')
             ->orderByDesc('created_at')
-            ->get(['url', 'status_code', 'output', 'created_at']);
+            ->get(['url', 'input', 'status_code', 'output', 'created_at']);
 
         $results = [];
         $toPing = [];
@@ -152,6 +152,14 @@ class IntegrationMap extends Component
 
         foreach ($integration['log_url_excludes'] ?? [] as $exclude) {
             if (str_contains($logUrl, $exclude)) {
+                return false;
+            }
+        }
+
+        if (isset($integration['log_input_contains'])) {
+            $body = $log->input['xml_body'] ?? '';
+
+            if (! is_string($body) || ! str_contains($body, $integration['log_input_contains'])) {
                 return false;
             }
         }

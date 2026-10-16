@@ -35,7 +35,7 @@ Medan bertanda **Perlu diisi** tidak wujud dalam repositori (biasanya hanya pada
 | 6 | LPM SPM Ulangan | [06-lpm-spm-ulangan.md](06-lpm-spm-ulangan.md) | REST + Bearer | `POST /api/lpm/svkspmulangan` | Ada |
 | 7 | LPM APKV / SVM | [07-lpm-apkv-svm.md](07-lpm-apkv-svm.md) | HTTP POST + Bearer | `POST /api/lpm/svm` | Ada |
 | 8 | MyGDX MUET | [08-mygdx-muet.md](08-mygdx-muet.md) | SOAP / X-Road 4.0 | `POST /api/mygdx/muet` | Ada |
-| 9 | MyGDX STPM | [09-mygdx-stpm.md](09-mygdx-stpm.md) | SOAP / X-Road 4.0 | `POST /api/mygdx/stpm` | Laluan API ada; tiada nod katalog |
+| 9 | MyGDX STPM | [09-mygdx-stpm.md](09-mygdx-stpm.md) | SOAP / X-Road 4.0 | `POST /api/mygdx/stpm` | Ada |
 | 10 | iSCAF | [10-iscaf.md](10-iscaf.md) | REST + X-Api-Key | `POST /api/iscaf/*` | Ada |
 | 11 | MQR | [11-mqr.md](11-mqr.md) | HTTP GET | Tiada laluan `/api` awam (sync dari UI) | Ada |
 | 12 | MySPP dokumen | [00-hub-spp-integration.md](00-hub-spp-integration.md) | HTTP GET binary | `GET /api/myspp/dokumen` | Tiada |

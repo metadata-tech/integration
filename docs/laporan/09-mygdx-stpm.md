@@ -4,7 +4,7 @@ Semakan keputusan STPM melalui MyGDX (X-Road) ke MPM SSKSM.
 
 | Medan | Nilai |
 |-------|--------|
-| Kod katalog | Tiada slug dalam `config/integrations.php` (laluan API wujud) |
+| Kod katalog | `mygdx-stpm` (`/integrasi/mygdx-stpm`) |
 | Service | `App\Services\MYGDXService` (`getSTPM`) |
 | Inbound hub | `POST /api/mygdx/stpm` |
 | Outbound | `POST https://spp.mygdx.gov.my` (SOAP) |
@@ -63,6 +63,7 @@ MySPP SIT: `callStpmMyGdxApi()` → `http://10.29.53.228/api/mygdx/stpm`.
 ## Rujukan kod
 
 - `app/Services/MYGDXService.php` (`getSTPM`)
+- `app/Livewire/StpmForm.php` (borang semakan)
 - `app/Http/Controllers/Api/MyGDXController.php` (`stpm`)
 - `resources/MyGDX/stpm.xml`
 - MySPP `_mapps/akademik/sql_akademik.php`

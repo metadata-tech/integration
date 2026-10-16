@@ -73,7 +73,10 @@
                             <p class="mt-1 text-xs text-gray-500">
                                 {{ number_format($report['total']) }} rekod ·
                                 {{ number_format($report['berjaya']) }} berjaya ·
-                                {{ number_format($report['gagal']) }} gagal
+                                {{ number_format($report['gagal']) }} gagal ·
+                                {{ number_format($report['kod_mqa_pendua']) }} kod MQA pendua ·
+                                {{ number_format($report['rekod_dinyahaktifkan']) }} rekod dinyahaktifkan ·
+                                {{ number_format($report['rujukan_baharu']) }} rujukan baharu
                             </p>
                         </div>
 
@@ -96,6 +99,10 @@
                             >
                                 Gagal + Sebab
                             </a>
+                            @if($report['ada_laporan_audit'])
+                                <a href="{{ route('mqr.reports.download', ['run' => $report['id'], 'type' => 'duplicates']) }}" class="inline-flex items-center rounded-lg bg-amber-600 px-3 py-2 text-xs font-medium text-white hover:bg-amber-700">Kod MQA Pendua</a>
+                                <a href="{{ route('mqr.reports.download', ['run' => $report['id'], 'type' => 'references']) }}" class="inline-flex items-center rounded-lg bg-slate-600 px-3 py-2 text-xs font-medium text-white hover:bg-slate-700">Rujukan Baharu</a>
+                            @endif
                         </div>
                     </div>
                 </div>
@@ -142,6 +149,11 @@
                     </p>
                 </div>
             </div>
+            <p class="mt-3 text-center text-xs text-gray-600">
+                {{ number_format($kodMqaPenduaCount) }} kod MQA pendua ·
+                {{ number_format($rekodDinyahaktifkanCount) }} rekod dinyahaktifkan ·
+                {{ number_format($rujukanBaharuCount) }} rujukan baharu
+            </p>
 
             @if(!$isMapping && $runStatus === 'completed')
                 <div class="mt-4 text-center text-sm font-bold text-green-600">

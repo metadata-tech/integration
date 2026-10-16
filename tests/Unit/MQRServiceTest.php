@@ -1,480 +1,91 @@
 <?php
 
+use App\Services\MQRInstitutionGroup;
+use App\Services\MQRInstitutionType;
 use App\Services\MQRService;
 
-function mqrReferences(
-    MQRService $service,
-    array $institutions,
-    array $specializations = []
-): array {
-    $institutionRecords = collect($institutions)->map(
-        fn (array $institution): object => (object) [
-            'KOD' => $institution[0],
-            'DISKRIPSI' => $institution[1],
-        ]
-    );
-
-    $specializationRecords = collect($specializations)->map(
-        fn (array $specialization): object => (object) [
-            'kod' => $specialization[0],
-            'DISKRIPSI' => $specialization[1],
-            'KATEGORI' => $specialization[2] ?? 1,
-        ]
-    );
-
+function mqrReferences(array $institutions, array $specializations): array
+{
+    $service = new MQRService;
     $references = $service->prepareReferenceData(
-        $institutionRecords,
-        $specializationRecords
+        collect($institutions)->map(fn ($row) => (object) ['KOD' => $row[0], 'DISKRIPSI' => $row[1]]),
+        collect($specializations)->map(fn ($row) => (object) ['kod' => $row[0], 'DISKRIPSI' => $row[1], 'KATEGORI' => $row[2] ?? 2])
     );
-    $references['qualification_level_codes'] = collect([1, 2, 3, 4, 6, 7])
-        ->mapWithKeys(fn (int $code): array => [$code => $code]);
+    $references['qualification_level_codes'] = collect([1, 2, 3, 4, 6, 7])->mapWithKeys(fn ($code) => [$code => $code]);
 
     return $references;
 }
 
-function mqrRecord(
-    ?string $institution,
-    ?string $qualification,
-    ?string $mqaCode = 'MQA/FA0001',
-    ?string $qualificationLevel = null,
-    ?string $necCode = null
-): object {
+function mqrRecord(?string $institution, ?string $specialization, ?string $mqa = 'MQA/FA1', ?string $level = null, ?string $nec = null): object
+{
     return (object) [
-        'kod_rujukan_akreditasi_penuh' => $mqaCode,
         'nama_institusi' => $institution,
-        'nama_kelayakan_bm' => $qualification,
-        'peringkat_kelayakan' => $qualificationLevel,
-        'kod_nec' => $necCode,
+        'nama_kelayakan_bm' => $specialization,
+        'kod_rujukan_akreditasi_penuh' => $mqa,
+        'peringkat_kelayakan' => $level,
+        'kod_nec' => $nec,
     ];
 }
 
-it('matches an institution when MQR appends a campus qualifier', function () {
+it('matches only case and edge-space differences', function () {
     $service = new MQRService;
-    $references = mqrReferences(
-        $service,
-        [
-            ['00038', 'UNIVERSITI SULTAN ZAINAL ABIDIN (UNISZA)'],
-        ],
-        [
-            ['P001', 'Sarjana Muda Teknologi Maklumat'],
-        ]
-    );
+    $refs = mqrReferences([['00012', 'Institut Pendidikan Guru Malaysia']], [['12', 'Diploma Pendidikan']]);
 
-    $result = $service->evaluateMapping(
-        mqrRecord(
-            'Universiti Sultan Zainal Abidin (UniSZA) (Kampus Gong Badak)',
-            'SARJANA MUDA TEKNOLOGI MAKLUMAT'
-        ),
-        $references
+    expect($service->evaluateMapping(mqrRecord(' institut pendidikan guru malaysia ', ' DIPLOMA PENDIDIKAN '), $refs)['success'])->toBeTrue()
+        ->and($service->evaluateMapping(mqrRecord('Institut Pendidikan Guru (IPG) (Kampus Bahasa Melayu)', 'Diploma Pendidikan'), $refs)['success'])->toBeFalse()
+        ->and($service->evaluateMapping(mqrRecord('Institut Pendidikan Guru Malaysia', 'Diploma  Pendidikan'), $refs)['success'])->toBeFalse();
+});
+
+it('keeps punctuation and branch names distinct', function () {
+    $service = new MQRService;
+    $refs = mqrReferences([['00041', 'Universiti Teknologi MARA (UiTM)']], [['12', 'Diploma Sains']]);
+
+    expect($service->evaluateMapping(mqrRecord('Universiti Teknologi MARA Cawangan Perlis Kampus Arau', 'Diploma Sains'), $refs)['success'])->toBeFalse()
+        ->and($service->evaluateMapping(mqrRecord('Universiti Teknologi MARA (UiTM)', 'Diploma-Sains'), $refs)['success'])->toBeFalse();
+});
+
+it('chooses the lowest numeric reference code for an exact duplicate name', function () {
+    $service = new MQRService;
+    $refs = mqrReferences(
+        [['03062', 'Kolej Universiti Yayasan Pahang'], ['01308', 'KOLEJ UNIVERSITI YAYASAN PAHANG']],
+        [['24000', 'Diploma Pengurusan', 2], ['15900', 'DIPLOMA PENGURUSAN', 1]]
     );
+    $result = $service->evaluateMapping(mqrRecord('Kolej Universiti Yayasan Pahang', 'Diploma Pengurusan'), $refs);
 
     expect($result['success'])->toBeTrue()
-        ->and($result['institution']->KOD)->toBe('00038')
-        ->and($result['institution_match_method'])
-        ->toBe('Maklumat kampus/cawangan di hujung nama diabaikan');
+        ->and($result['institution']->KOD)->toBe('01308')
+        ->and($result['specialization']->kod)->toBe('15900')
+        ->and($result['specialization']->KATEGORI)->toBe(1);
 });
 
-it('chooses the longest specific institution before a generic prefix', function () {
-    $service = new MQRService;
-    $references = mqrReferences(
-        $service,
-        [
-            ['00427', 'CITY UNIVERSITY'],
-            ['00428', 'CITY UNIVERSITY OF HONG KONG'],
-        ],
-        [
-            ['P001', 'Sarjana Muda Sains'],
-        ]
-    );
-
-    $result = $service->evaluateMapping(
-        mqrRecord(
-            'City University of Hong Kong (Campus Kowloon)',
-            'Sarjana Muda Sains'
-        ),
-        $references
-    );
-
-    expect($result['success'])->toBeTrue()
-        ->and($result['institution']->KOD)->toBe('00428');
+it('groups known families without merging similar organisations', function () {
+    expect(MQRInstitutionGroup::resolve('Institut Pendidikan Guru (IPG) (Kampus Bahasa Melayu)'))->toBe('IPGM')
+        ->and(MQRInstitutionGroup::resolve('Universiti Teknologi MARA Cawangan Perlis Kampus Arau'))->toBe('UITM')
+        ->and(MQRInstitutionGroup::resolve('Politeknik Ungku Omar'))->toBe('POLI')
+        ->and(MQRInstitutionGroup::resolve('Kolej Poly-Tech MARA Kuantan'))->toBe('KPTM')
+        ->and(MQRInstitutionGroup::resolve('Tunku Abdul Rahman University of Management and Technology Cawangan Johor'))->toBe('TAR UMT')
+        ->and(MQRInstitutionGroup::resolve('Universiti Tunku Abdul Rahman (UTAR) Kampus Sungai Long'))->toBe('UTAR')
+        ->and(MQRInstitutionGroup::resolve('Institusi Tidak Diketahui'))->toBeNull();
 });
 
-it('does not treat an organisation name continuation as a campus suffix', function () {
-    $service = new MQRService;
-    $references = mqrReferences(
-        $service,
-        [
-            ['00427', 'CITY UNIVERSITY'],
-        ],
-        [
-            ['P001', 'Sarjana Muda Sains'],
-        ]
-    );
+it('inherits institution type from a known family and classifies other new references', function () {
+    $types = MQRInstitutionType::groupTypes([
+        (object) ['KUMPULAN_INSTITUSI' => 'IPGM', 'JENIS_INSTITUSI' => '1'],
+        (object) ['KUMPULAN_INSTITUSI' => 'UNIKL', 'JENIS_INSTITUSI' => '2'],
+    ]);
 
-    $result = $service->evaluateMapping(
-        mqrRecord('City University of Hong Kong', 'Sarjana Muda Sains'),
-        $references
-    );
-
-    expect($result['success'])->toBeFalse()
-        ->and($result['institution'])->toBeNull()
-        ->and($result['reason'])->toContain('Tiada institusi yang sepadan');
+    expect(MQRInstitutionType::resolve('Institut Pendidikan Guru Kampus Bahasa Melayu', 'IPGM', $types))->toBe('1')
+        ->and(MQRInstitutionType::resolve('Universiti Kuala Lumpur Kampus Kota', 'UNIKL', $types))->toBe('2')
+        ->and(MQRInstitutionType::resolve('Universiti Malaya', null, $types))->toBe('1')
+        ->and(MQRInstitutionType::resolve('Universiti Malaya-Wales', null, $types))->toBe('2')
+        ->and(MQRInstitutionType::resolve('Kolej  Vokasional Kajang', null, $types))->toBe('1')
+        ->and(MQRInstitutionType::resolve('Kolej Baharu', null, $types))->toBe('2');
 });
 
-it('does not confuse Universiti Malaya-Wales with Universiti Malaya', function () {
+it('maps qualification level nine by education NEC', function () {
     $service = new MQRService;
-    $references = mqrReferences(
-        $service,
-        [
-            ['00026', 'UNIVERSITI MALAYA (UM)'],
-        ],
-        [
-            ['P001', 'Sarjana Muda Sains'],
-        ]
-    );
+    $refs = mqrReferences([['1', 'Universiti Contoh']], [['2', 'Diploma Contoh']]);
 
-    $result = $service->evaluateMapping(
-        mqrRecord('Universiti Malaya-Wales (UM-Wales)', 'Sarjana Muda Sains'),
-        $references
-    );
-
-    expect($result['success'])->toBeFalse()
-        ->and($result['institution'])->toBeNull()
-        ->and($result['reason'])->toContain('Tiada institusi yang sepadan');
-});
-
-it('matches an appended campus location without an explicit branch marker', function () {
-    $service = new MQRService;
-    $references = mqrReferences(
-        $service,
-        [
-            ['00021', 'UNIVERSITI TEKNOLOGI MARA (UITM)'],
-        ],
-        [
-            ['P001', 'Sarjana Muda Sains'],
-        ]
-    );
-
-    $result = $service->evaluateMapping(
-        mqrRecord(
-            'Universiti Teknologi MARA (UiTM) Shah Alam',
-            'Sarjana Muda Sains'
-        ),
-        $references
-    );
-
-    expect($result['success'])->toBeTrue()
-        ->and($result['institution']->KOD)->toBe('00021')
-        ->and($result['institution_match_method'])
-        ->toBe('Nama institusi diikuti maklumat lokasi/cawangan');
-});
-
-it('matches a qualified official name from a sufficiently specific base name', function () {
-    $service = new MQRService;
-    $references = mqrReferences(
-        $service,
-        [
-            ['00031', 'UNIVERSITI MALAYSIA PAHANG (UMP)'],
-        ],
-        [
-            ['P001', 'Sarjana Muda Sains'],
-        ]
-    );
-
-    $result = $service->evaluateMapping(
-        mqrRecord(
-            'Universiti Malaysia Pahang Al-Sultan Abdullah',
-            'Sarjana Muda Sains'
-        ),
-        $references
-    );
-
-    expect($result['success'])->toBeTrue()
-        ->and($result['institution']->KOD)->toBe('00031')
-        ->and($result['institution_match_method'])
-        ->toBe('Nama asas institusi diikuti maklumat lokasi/cawangan');
-});
-
-it('does not count a numeric token as an extra word for a generic base prefix', function () {
-    $service = new MQRService;
-    $references = mqrReferences(
-        $service,
-        [
-            ['00032', 'KOLEJ 1 MALAYSIA (K1M)'],
-        ],
-        [
-            ['P001', 'Diploma Contoh'],
-        ]
-    );
-
-    $result = $service->evaluateMapping(
-        mqrRecord('Kolej 1 Malaysia Selatan', 'Diploma Contoh'),
-        $references
-    );
-
-    expect($result['success'])->toBeFalse()
-        ->and($result['institution'])->toBeNull()
-        ->and($result['reason'])->toContain('Tiada institusi yang sepadan');
-});
-
-it('matches an explicit branch when MQR omits the reference acronym', function () {
-    $service = new MQRService;
-    $references = mqrReferences(
-        $service,
-        [
-            ['00021', 'UNIVERSITI TEKNOLOGI MARA (UITM)'],
-        ],
-        [
-            ['P001', 'Sarjana Muda Sains'],
-        ]
-    );
-
-    $result = $service->evaluateMapping(
-        mqrRecord(
-            'Universiti Teknologi MARA Cawangan Selangor Kampus Puncak Alam',
-            'Sarjana Muda Sains'
-        ),
-        $references
-    );
-
-    expect($result['success'])->toBeTrue()
-        ->and($result['institution']->KOD)->toBe('00021')
-        ->and($result['institution_match_method'])
-        ->toBe('Maklumat kampus/cawangan di hujung nama diabaikan');
-});
-
-it('does not discard a meaningful terminal parenthetical qualifier', function () {
-    $service = new MQRService;
-    $references = mqrReferences(
-        $service,
-        [
-            ['00001', 'KOLEJ CONTOH (MALAYSIA)'],
-        ],
-        [
-            ['P001', 'Diploma Contoh'],
-        ]
-    );
-
-    $result = $service->evaluateMapping(
-        mqrRecord('Kolej Contoh (Singapura)', 'Diploma Contoh'),
-        $references
-    );
-
-    expect($result['success'])->toBeFalse()
-        ->and($result['institution'])->toBeNull()
-        ->and($result['reason'])->toContain('Tiada institusi yang sepadan');
-});
-
-it('treats controlled former-name text in a reference as metadata only', function () {
-    $service = new MQRService;
-    $references = mqrReferences(
-        $service,
-        [
-            [
-                '01236',
-                'KOLEJ REGENT (DAHULU DIKENALI SEBAGAI KOLEJ CYBER PUTRA)',
-            ],
-        ],
-        [
-            ['P001', 'Diploma Contoh'],
-        ]
-    );
-
-    $currentNameResult = $service->evaluateMapping(
-        mqrRecord('Kolej Regent', 'Diploma Contoh'),
-        $references
-    );
-    $formerNameResult = $service->evaluateMapping(
-        mqrRecord('Kolej Cyber Putra', 'Diploma Contoh'),
-        $references
-    );
-
-    expect($currentNameResult['success'])->toBeTrue()
-        ->and($currentNameResult['institution']->KOD)->toBe('01236')
-        ->and($formerNameResult['success'])->toBeFalse()
-        ->and($formerNameResult['institution'])->toBeNull();
-});
-
-it('does not remove a semantic institution name in parentheses', function () {
-    $service = new MQRService;
-    $references = mqrReferences(
-        $service,
-        [
-            ['00427', 'UNIVERSITY OF WALES (CARDIFF UNIVERSITY)'],
-        ],
-        [
-            ['P001', 'Sarjana Muda Sains'],
-        ]
-    );
-
-    $result = $service->evaluateMapping(
-        mqrRecord('University Of Wales', 'Sarjana Muda Sains'),
-        $references
-    );
-
-    expect($result['success'])->toBeFalse()
-        ->and($result['institution'])->toBeNull()
-        ->and($result['reason'])->toContain('Tiada institusi yang sepadan');
-});
-
-it('requires a complete word boundary for partial institution matching', function () {
-    $service = new MQRService;
-    $references = mqrReferences(
-        $service,
-        [
-            ['00427', 'CITY UNIVERSITY'],
-        ],
-        [
-            ['P001', 'Sarjana Muda Sains'],
-        ]
-    );
-
-    $result = $service->evaluateMapping(
-        mqrRecord('City Universityville', 'Sarjana Muda Sains'),
-        $references
-    );
-
-    expect($result['success'])->toBeFalse()
-        ->and($result['institution'])->toBeNull()
-        ->and($result['reason'])->toContain('Tiada institusi yang sepadan');
-});
-
-it('reports an ambiguous institution instead of selecting one arbitrarily', function () {
-    $service = new MQRService;
-    $references = mqrReferences(
-        $service,
-        [
-            ['01308', 'KOLEJ UNIVERSITI YAYASAN PAHANG'],
-            ['03062', 'Kolej Universiti Yayasan Pahang'],
-        ],
-        [
-            ['P001', 'Diploma Pengurusan'],
-        ]
-    );
-
-    $result = $service->evaluateMapping(
-        mqrRecord('Kolej Universiti Yayasan Pahang', 'Diploma Pengurusan'),
-        $references
-    );
-
-    expect($result['success'])->toBeFalse()
-        ->and($result['institution'])->toBeNull()
-        ->and($result['reason'])->toContain('Lebih daripada satu institusi rujukan');
-});
-
-it('scopes cached institution results to the supplied reference set', function () {
-    $service = new MQRService;
-    $referencesA = mqrReferences(
-        $service,
-        [['A001', 'UNIVERSITI CONTOH']],
-        [['P001', 'Diploma Contoh']]
-    );
-    $referencesB = mqrReferences(
-        $service,
-        [['B001', 'UNIVERSITI CONTOH']],
-        [['P001', 'Diploma Contoh']]
-    );
-
-    $resultA = $service->evaluateMapping(
-        mqrRecord('Universiti Contoh', 'Diploma Contoh'),
-        $referencesA
-    );
-    $resultB = $service->evaluateMapping(
-        mqrRecord('Universiti Contoh', 'Diploma Contoh'),
-        $referencesB
-    );
-
-    expect($resultA['institution']->KOD)->toBe('A001')
-        ->and($resultB['institution']->KOD)->toBe('B001');
-});
-
-it('reports every applicable reason when a mapping fails', function () {
-    $service = new MQRService;
-    $references = mqrReferences(
-        $service,
-        [
-            ['00001', 'UNIVERSITI CONTOH'],
-        ],
-        [
-            ['P001', 'Diploma Contoh'],
-        ]
-    );
-
-    $result = $service->evaluateMapping(
-        mqrRecord('Institusi Tidak Wujud', 'Kelayakan Tidak Wujud', ' '),
-        $references
-    );
-
-    expect($result['success'])->toBeFalse()
-        ->and($result['reason'])
-        ->toContain('Kod rujukan MQA tidak dibekalkan')
-        ->toContain('Tiada institusi yang sepadan')
-        ->toContain('Tiada pengkhususan yang sepadan');
-});
-
-it('normalizes punctuation as word boundaries', function () {
-    $service = new MQRService;
-    $references = mqrReferences(
-        $service,
-        [
-            ['00001', 'INSTITUT MARA-JAPAN'],
-        ],
-        [
-            ['P001', 'Diploma Contoh'],
-        ]
-    );
-
-    $result = $service->evaluateMapping(
-        mqrRecord('Institut MARA JAPAN', 'Diploma Contoh'),
-        $references
-    );
-
-    expect($result['success'])->toBeTrue()
-        ->and($result['institution']->KOD)->toBe('00001');
-});
-
-it('resolves qualification level ids from MQR level and NEC codes', function () {
-    $service = new MQRService;
-    $references = mqrReferences(
-        $service,
-        [['00001', 'UNIVERSITI CONTOH']],
-        [['P001', 'Kelayakan Contoh']]
-    );
-    $cases = [
-        ['3', '0110', 1],
-        ['3', '0111', 1],
-        ['3', '0112', 1],
-        ['3', '0113', 1],
-        ['3', '0114', 1],
-        ['4', '0111', 1],
-        ['6', '0114', 1],
-        ['3', '0210', 2],
-        ['4', '0210', 2],
-        ['6', '0210', 2],
-        ['7', '0112', 3],
-        [' 7 ', ' 0114 ', 3],
-        ['7', '0210', 4],
-        ['8', '0110', 6],
-        ['9', '0210', 6],
-        ['10', '', 6],
-        ['11', '0110', 7],
-        ['12', '0110', null],
-        [null, '0110', null],
-    ];
-
-    foreach ($cases as [$level, $necCode, $expectedId]) {
-        $result = $service->evaluateMapping(
-            mqrRecord(
-                'Universiti Contoh',
-                'Kelayakan Contoh',
-                'MQA/FA0001',
-                $level,
-                $necCode
-            ),
-            $references
-        );
-
-        expect($result['success'])->toBeTrue()
-            ->and($result['qualification_level_id'])->toBe($expectedId);
-    }
+    expect($service->evaluateMapping(mqrRecord('Universiti Contoh', 'Diploma Contoh', 'A1', '9', '0112'), $refs)['qualification_level_id'])->toBe(1)
+        ->and($service->evaluateMapping(mqrRecord('Universiti Contoh', 'Diploma Contoh', 'A2', '9', '0210'), $refs)['qualification_level_id'])->toBe(2);
 });

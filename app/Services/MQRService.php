@@ -11,9 +11,9 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -105,7 +105,6 @@ class MQRService
                 return ['run' => $run, 'stats' => $stats];
             }
 
-            $references = $this->loadReferenceData();
             $mqrData = MqrData::query()
                 ->where('id', '>', $run->last_mqr_id)
                 ->where('id', '<=', $run->max_mqr_id)
@@ -119,6 +118,9 @@ class MQRService
                 );
             }
 
+            $this->ensureReferences($mqrData, $run->id);
+            $references = $this->loadReferenceData();
+
             $reportRows = [];
             $successfulMappings = [];
             $failureRows = [];
@@ -131,10 +133,7 @@ class MQRService
                 if ($mapping['success']) {
                     $institutionCode = (string) $mapping['institution']->KOD;
                     $specializationCode = (string) $mapping['specialization']->kod;
-                    $successfulMappings[$this->mappingPairKey(
-                        $institutionCode,
-                        $specializationCode
-                    )] = [
+                    $successfulMappings[$this->mqaKey((string) $mqr->kod_rujukan_akreditasi_penuh)] = [
                         'kod_institusi' => $institutionCode,
                         'kod_pengkhususan' => $specializationCode,
                         'id_peringkat_kelulusan' => $mapping['qualification_level_id'],
@@ -157,7 +156,7 @@ class MQRService
                 MqrMappingFailure::query()->insert($failureRows);
             }
 
-            $this->saveMappings(array_values($successfulMappings));
+            $this->saveMappings(array_values($successfulMappings), $run->id);
             $reportService->writeBatchParts($run, $reportRows);
 
             $processedCount = $run->processed_count + $stats['processed'];
@@ -237,41 +236,40 @@ class MQRService
     public function prepareReferenceData(Collection $institutions, Collection $specializations): array
     {
         $this->institutionMatchCache = [];
-
-        $institutionItems = $institutions
-            ->flatMap(function (object $institution): array {
-                return array_map(
-                    fn (array $alias): array => [
-                        'record' => $institution,
-                        'normalized' => $alias['normalized'],
-                        'priority' => $alias['priority'],
-                    ],
-                    $this->institutionAliases($institution->DISKRIPSI ?? '')
-                );
-            })
-            ->filter(fn (array $item): bool => $item['normalized'] !== '')
-            ->unique(
-                fn (array $item): string => ($item['record']->KOD ?? '').'|'.$item['normalized']
-            )
-            ->values();
-
-        $specializationIndex = $specializations->mapWithKeys(
-            function (object $specialization): array {
-                $normalized = $this->normalizeQualificationText(
-                    $specialization->DISKRIPSI ?? ''
-                );
-
-                return $normalized === ''
-                    ? []
-                    : [$normalized => $specialization];
+        $lowestCode = function (object $a, object $b, string $column): object {
+            $first = (string) $a->{$column};
+            $second = (string) $b->{$column};
+            if (ctype_digit($first) && ctype_digit($second)) {
+                return (int) $first <= (int) $second ? $a : $b;
             }
-        );
+            if (ctype_digit($first) !== ctype_digit($second)) {
+                return ctype_digit($first) ? $a : $b;
+            }
+
+            return strcmp($first, $second) <= 0 ? $a : $b;
+        };
+        $institutionIndex = collect();
+        foreach ($institutions as $institution) {
+            $key = $this->exactNameKey($institution->DISKRIPSI ?? null);
+            if ($key !== '') {
+                $institutionIndex[$key] = isset($institutionIndex[$key])
+                    ? $lowestCode($institutionIndex[$key], $institution, 'KOD')
+                    : $institution;
+            }
+        }
+        $specializationIndex = collect();
+        foreach ($specializations as $specialization) {
+            $key = $this->exactNameKey($specialization->DISKRIPSI ?? null);
+            if ($key !== '') {
+                $specializationIndex[$key] = isset($specializationIndex[$key])
+                    ? $lowestCode($specializationIndex[$key], $specialization, 'kod')
+                    : $specialization;
+            }
+        }
 
         return [
-            'institution_exact' => $institutionItems
-                ->where('priority', 3)
-                ->groupBy('normalized'),
-            'institution_alias' => $institutionItems->groupBy('normalized'),
+            'institution_exact' => $institutionIndex,
+            'institution_alias' => $institutionIndex,
             'specialization_exact' => $specializationIndex,
         ];
     }
@@ -319,7 +317,7 @@ class MQRService
             $reasons[] = 'Nama kelayakan BM tidak dibekalkan oleh API MQR.';
         } else {
             $specialization = $references['specialization_exact']->get(
-                $this->normalizeQualificationText($specializationName)
+                $this->exactNameKey($specializationName)
             );
 
             if (! $specialization) {
@@ -363,9 +361,9 @@ class MQRService
         );
 
         $referenceCode = match (true) {
-            in_array($level, ['3', '4', '6'], true) => $isEducationNec ? 1 : 2,
+            in_array($level, ['3', '4', '6', '9'], true) => $isEducationNec ? 1 : 2,
             $level === '7' => $isEducationNec ? 3 : 4,
-            in_array($level, ['8', '9', '10'], true) => 6,
+            in_array($level, ['8', '10'], true) => 6,
             $level === '11' => 7,
             default => null,
         };
@@ -389,7 +387,7 @@ class MQRService
     }
 
     /**
-     * Proses semua keputusan secara chunk tanpa bergantung pada kod_mqa yang boleh ditimpa.
+     * Proses semua keputusan secara chunk terus daripada data MQR.
      */
     public function eachMappingResult(callable $callback, int $chunkSize = 1000): void
     {
@@ -414,21 +412,22 @@ class MQRService
      */
     private function findInstitutionMatch(?string $name, array $references): array
     {
-        $normalizedName = $this->normalizeText($name);
-        $cacheKey = trim((string) $name);
-        $referenceKey = spl_object_id($references['institution_alias']);
-
-        if (isset($this->institutionMatchCache[$referenceKey])
-            && array_key_exists(
-                $cacheKey,
-                $this->institutionMatchCache[$referenceKey]
-            )
-        ) {
-            return $this->institutionMatchCache[$referenceKey][$cacheKey];
+        $key = $this->exactNameKey($name);
+        if ($key === '') {
+            return ['institution' => null, 'method' => null, 'reason' => 'Nama institusi tidak dibekalkan oleh API MQR.'];
         }
+        $institution = $references['institution_exact']->get($key);
 
-        return $this->institutionMatchCache[$referenceKey][$cacheKey] =
-            $this->resolveInstitutionMatch($name, $normalizedName, $references);
+        return [
+            'institution' => $institution,
+            'method' => $institution ? 'Nama tepat' : null,
+            'reason' => $institution ? null : 'Tiada institusi yang sepadan dalam jadual ref_institusi.',
+        ];
+    }
+
+    private function exactNameKey(?string $name): string
+    {
+        return mb_strtolower(trim((string) $name), 'UTF-8');
     }
 
     /**
@@ -705,9 +704,127 @@ class MQRService
         return $references;
     }
 
+    /** Daftar nama MQR yang belum ada sebelum batch dinilai. */
+    private function ensureReferences(Collection $records, ?string $runId = null, ?string $kind = null): int
+    {
+        $names = ['institution' => [], 'specialization' => []];
+        foreach ($records as $record) {
+            if (trim((string) ($record->kod_rujukan_akreditasi_penuh ?? '')) === ''
+                || trim((string) ($record->nama_institusi ?? '')) === ''
+                || trim((string) ($record->nama_kelayakan_bm ?? '')) === '') {
+                continue;
+            }
+            foreach (['institution' => 'nama_institusi', 'specialization' => 'nama_kelayakan_bm'] as $type => $field) {
+                if ($kind !== null && $kind !== $type) {
+                    continue;
+                }
+                $raw = trim((string) ($record->{$field} ?? ''));
+                if ($raw !== '') {
+                    $names[$type][$this->exactNameKey($raw)] = $raw;
+                }
+            }
+        }
+        if ($names['institution'] === [] && $names['specialization'] === []) {
+            return 0;
+        }
+
+        $educationNames = [];
+        if ($names['specialization'] !== []) {
+            $keys = array_keys($names['specialization']);
+            foreach (array_chunk($keys, 300) as $chunk) {
+                $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+                $rows = DB::table('mqr_data')->whereIn('kod_nec', self::EDUCATION_NEC_CODES)
+                    ->whereRaw('LOWER(TRIM(nama_kelayakan_bm)) IN ('.$placeholders.')', $chunk)
+                    ->pluck('nama_kelayakan_bm');
+                foreach ($rows as $name) {
+                    $educationNames[$this->exactNameKey($name)] = true;
+                }
+            }
+        }
+
+        $connection = $this->mappingConnection();
+        $hasLock = false;
+        if ($connection->getDriverName() === 'mysql') {
+            $hasLock = (int) ($connection->selectOne("SELECT GET_LOCK('mqr_reference_allocation', 15) AS acquired")->acquired ?? 0) === 1;
+            if (! $hasLock) {
+                throw new \RuntimeException('Kunci pendaftaran rujukan MQR tidak dapat diperoleh.');
+            }
+        }
+
+        try {
+            return $connection->transaction(function () use ($connection, $names, $educationNames, $runId): int {
+                $registered = 0;
+                foreach (['institution' => ['ref_institusi', 'KOD'], 'specialization' => ['ref_pengkhususan', 'kod']] as $type => [$table, $codeColumn]) {
+                    if ($names[$type] === []) {
+                        continue;
+                    }
+                    $qualified = $this->qualifiedTableName($table);
+                    $columns = $this->referenceColumns($qualified);
+                    $nameColumn = $this->requireColumn($columns, 'DISKRIPSI');
+                    $typeColumn = $type === 'institution'
+                        ? $this->requireColumn($columns, 'JENIS_INSTITUSI')
+                        : null;
+                    $existingRows = $connection->table($qualified)->where('is_deleted', 0)
+                        ->get($type === 'institution'
+                            ? [$nameColumn, $typeColumn, $this->requireColumn($columns, 'KUMPULAN_INSTITUSI')]
+                            : [$nameColumn]);
+                    $groupTypes = $type === 'institution'
+                        ? MQRInstitutionType::groupTypes($existingRows)
+                        : [];
+                    $existing = [];
+                    foreach ($existingRows as $row) {
+                        $existing[$this->exactNameKey($row->{$nameColumn})] = true;
+                    }
+                    $nextCode = $this->nextReferenceCode($connection, $qualified, $codeColumn, $type === 'institution');
+                    foreach ($names[$type] as $key => $name) {
+                        if (isset($existing[$key])) {
+                            continue;
+                        }
+                        $group = $type === 'institution' ? MQRInstitutionGroup::resolve($name) : null;
+                        $category = $type === 'specialization' ? (isset($educationNames[$key]) ? 1 : 2) : null;
+                        $registeredAt = now();
+                        $row = [$codeColumn => $nextCode, $nameColumn => $name];
+                        $row[$this->requireColumn($columns, 'TARIKH_CIPTA')] = $registeredAt;
+                        $row[$this->requireColumn($columns, 'TARIKH_UBAHSUAI')] = $registeredAt;
+                        if ($this->optionalColumn($columns, 'is_deleted') !== null) {
+                            $row['is_deleted'] = 0;
+                        }
+                        if ($type === 'institution') {
+                            $row[$this->requireColumn($columns, 'KUMPULAN_INSTITUSI')] = $group;
+                            $row[$typeColumn] = MQRInstitutionType::resolve($name, $group, $groupTypes);
+                            if ($this->optionalColumn($columns, 'SAH_YT') !== null) {
+                                $row['SAH_YT'] = 'Y';
+                            }
+                        } else {
+                            $row[$this->requireColumn($columns, 'KATEGORI')] = $category;
+                        }
+                        $this->assertReferenceRowAllowed($columns, $row);
+                        $connection->table($qualified)->insert($row);
+                        $connection->table($this->qualifiedTableName('mqr_reference_registrations'))->insert([
+                            'run_id' => $runId,
+                            'jenis' => $type,
+                            'kod' => $nextCode,
+                            'nama' => $name,
+                            'kumpulan_institusi' => $group,
+                            'kategori' => $category,
+                            'created_at' => $registeredAt,
+                        ]);
+                        $registered++;
+                        $nextCode = $this->incrementReferenceCode($nextCode, $type === 'institution');
+                    }
+                }
+
+                return $registered;
+            });
+        } finally {
+            if ($hasLock) {
+                $connection->selectOne("SELECT RELEASE_LOCK('mqr_reference_allocation') AS released");
+            }
+        }
+    }
+
     /**
-     * Simpan semua pasangan berjaya menggunakan maksimum tiga query sasaran:
-     * satu bacaan, satu bulk update dan satu bulk insert.
+     * Simpan satu rekod aktif bagi setiap kod MQA dan audit rekod pendua.
      *
      * @param  array<int, array{
      *     kod_institusi: string,
@@ -717,91 +834,97 @@ class MQRService
      *     kod_mqa: mixed
      * }>  $mappings
      */
-    private function saveMappings(array $mappings): void
+    private function saveMappings(array $mappings, ?string $runId = null): void
     {
         if ($mappings === []) {
             return;
         }
-
         $connection = $this->mappingConnection();
-
-        $connection->transaction(function () use (
-            $connection,
-            $mappings
-        ): void {
-            $existingMappings = $this->mappingTable($connection)
-                ->select(['kod', 'kod_institusi', 'kod_pengkhususan'])
-                ->where('is_deleted', 0)
-                ->where(function (QueryBuilder $query) use ($mappings): void {
-                    foreach ($mappings as $mapping) {
-                        $query->orWhere(
-                            function (QueryBuilder $pair) use ($mapping): void {
-                                $pair
-                                    ->where(
-                                        'kod_institusi',
-                                        $mapping['kod_institusi']
-                                    )
-                                    ->where(
-                                        'kod_pengkhususan',
-                                        $mapping['kod_pengkhususan']
-                                    );
-                            }
-                        );
-                    }
-                })
-                ->lockForUpdate()
-                ->get()
-                ->groupBy(
-                    fn (object $mapping): string => $this->mappingPairKey(
-                        (string) $mapping->kod_institusi,
-                        (string) $mapping->kod_pengkhususan
-                    )
-                );
-            $updatedAt = now();
-            $updates = [];
-            $inserts = [];
-
+        $hasNormalizedColumn = $this->optionalColumn(
+            $this->referenceColumns($this->mappingTableName()),
+            'mqr_kod_mqa_aktif'
+        ) !== null;
+        $connection->transaction(function () use ($connection, $mappings, $runId, $hasNormalizedColumn): void {
             foreach ($mappings as $mapping) {
-                $key = $this->mappingPairKey(
-                    $mapping['kod_institusi'],
-                    $mapping['kod_pengkhususan']
-                );
-                $existingRows = $existingMappings->get($key);
-
-                if ($existingRows) {
-                    foreach ($existingRows as $existingRow) {
-                        $updates[] = [
-                            'kod' => $existingRow->kod,
-                            'kod_mqa' => $mapping['kod_mqa'],
-                            'id_peringkat_kelulusan' => $mapping['id_peringkat_kelulusan'],
-                            'tarikh_ubahsuai' => $updatedAt,
-                        ];
-                    }
-
+                $code = $this->mqaKey((string) $mapping['kod_mqa']);
+                if ($code === '') {
                     continue;
                 }
+                $query = $this->mappingTable($connection)->where('is_deleted', 0);
+                if ($hasNormalizedColumn) {
+                    $query->where('mqr_kod_mqa_aktif', $code);
+                } else {
+                    $query->whereRaw('UPPER(TRIM(kod_mqa)) = ?', [$code]);
+                }
+                $rows = $query->orderBy('kod')->lockForUpdate()->get();
+                $kept = $rows->first();
+                if ($kept === null) {
+                    $kept = $this->mappingTable($connection)->where('is_deleted', 0)
+                        ->where('kod_institusi', $mapping['kod_institusi'])
+                        ->where('kod_pengkhususan', $mapping['kod_pengkhususan'])
+                        ->where(fn (QueryBuilder $query) => $query->whereNull('kod_mqa')->orWhereRaw("TRIM(kod_mqa) = ''"))
+                        ->orderBy('kod')->lockForUpdate()->first();
+                }
+                foreach ($rows->skip(1) as $extra) {
+                    $this->mappingTable($connection)->where('kod', $extra->kod)
+                        ->update(['is_deleted' => 1, 'tarikh_ubahsuai' => now()]);
+                    $connection->table($this->qualifiedTableName('mqr_mapping_duplicate_audits'))->insert([
+                        'run_id' => $runId,
+                        'kod_mqa' => $code,
+                        'kod_dikekalkan' => $kept->kod,
+                        'kod_dinyahaktifkan' => $extra->kod,
+                        'kod_institusi_lama' => $extra->kod_institusi,
+                        'kod_pengkhususan_lama' => $extra->kod_pengkhususan,
+                        'kod_institusi_akhir' => $mapping['kod_institusi'],
+                        'kod_pengkhususan_akhir' => $mapping['kod_pengkhususan'],
+                        'hasil' => 'BERJAYA',
+                        'created_at' => now(),
+                    ]);
+                }
 
-                $inserts[] = [
-                    ...$mapping,
-                    'status' => 0,
-                    'is_deleted' => 0,
-                    'tarikh_cipta' => $updatedAt,
-                    'tarikh_ubahsuai' => $updatedAt,
-                ];
-            }
+                if ($kept !== null) {
+                    $update = [
+                        'kod_institusi' => $mapping['kod_institusi'],
+                        'kod_pengkhususan' => $mapping['kod_pengkhususan'],
+                        'kategori' => $mapping['kategori'],
+                        'kod_mqa' => trim((string) $mapping['kod_mqa']),
+                        'tarikh_ubahsuai' => now(),
+                    ];
+                    if ($mapping['id_peringkat_kelulusan'] !== null) {
+                        $update['id_peringkat_kelulusan'] = $mapping['id_peringkat_kelulusan'];
+                    }
+                    $this->mappingTable($connection)->where('kod', $kept->kod)->update($update);
+                } else {
+                    $this->mappingTable($connection)->insert([
+                        ...$mapping,
+                        'kod_mqa' => trim((string) $mapping['kod_mqa']),
+                        'status' => 0,
+                        'is_deleted' => 0,
+                        'tarikh_cipta' => now(),
+                        'tarikh_ubahsuai' => now(),
+                    ]);
+                }
 
-            if ($updates !== []) {
-                $this->bulkUpdateMappings(
-                    $connection,
-                    $updates,
-                    $updatedAt
-                );
-            }
-
-            if ($inserts !== []) {
-                $this->mappingTable($connection)->insert($inserts);
+                $connection->table($this->qualifiedTableName('mqr_mapping_duplicate_audits'))
+                    ->where('kod_mqa', $code)->where('kod_dikekalkan', $kept->kod ?? -1)
+                    ->where(function (QueryBuilder $query) use ($runId): void {
+                        $query->whereNull('run_id');
+                        if ($runId !== null) {
+                            $query->orWhere('run_id', $runId);
+                        }
+                    })
+                    ->update([
+                        'kod_institusi_akhir' => $mapping['kod_institusi'],
+                        'kod_pengkhususan_akhir' => $mapping['kod_pengkhususan'],
+                        'hasil' => 'BERJAYA',
+                    ]);
             }
         });
+    }
+
+    private function mqaKey(string $code): string
+    {
+        return mb_strtoupper(trim($code), 'UTF-8');
     }
 
     /**
@@ -920,6 +1043,14 @@ class MQRService
         string $specializationCode
     ): string {
         return $institutionCode."\x1F".$specializationCode;
+    }
+
+    private function mappingRecordKey(
+        string $institutionCode,
+        string $specializationCode,
+        string $mqaCode
+    ): string {
+        return $this->mappingPairKey($institutionCode, $specializationCode)."\x1F".$mqaCode;
     }
 
     public function syncData()
@@ -1091,6 +1222,14 @@ class MQRService
                     ];
                 }
             }
+
+            if ($normalizedWithoutAcronym === 'institut pendidikan guru malaysia') {
+                // MQR menggunakan IPG untuk kampus; rujukan menyimpan IPGM.
+                $aliases['institut pendidikan guru ipg'] = [
+                    'normalized' => 'institut pendidikan guru ipg',
+                    'priority' => 2,
+                ];
+            }
         }
 
         return array_values($aliases);
@@ -1255,17 +1394,18 @@ class MQRService
         set_time_limit(0);
 
         try {
-            $references = $this->loadReferenceData();
-
             $stats = [
                 'total_diperiksa' => 0,
                 'berjaya_dipadankan' => 0,
                 'gagal_dipadankan' => 0,
+                'rujukan_baharu' => 0,
             ];
 
             MqrData::query()
                 ->orderBy('id')
-                ->chunkById(1000, function (Collection $mqrChunk) use (&$stats, $references): void {
+                ->chunkById(1000, function (Collection $mqrChunk) use (&$stats): void {
+                    $stats['rujukan_baharu'] += $this->ensureReferences($mqrChunk);
+                    $references = $this->loadReferenceData();
                     DB::transaction(function () use ($mqrChunk, &$stats, $references): void {
                         $successfulMappings = [];
 
@@ -1281,10 +1421,7 @@ class MQRService
 
                             $institutionCode = (string) $mapping['institution']->KOD;
                             $specializationCode = (string) $mapping['specialization']->kod;
-                            $successfulMappings[$this->mappingPairKey(
-                                $institutionCode,
-                                $specializationCode
-                            )] = [
+                            $successfulMappings[$this->mqaKey((string) $mqr->kod_rujukan_akreditasi_penuh)] = [
                                 'kod_institusi' => $institutionCode,
                                 'kod_pengkhususan' => $specializationCode,
                                 'id_peringkat_kelulusan' => $mapping['qualification_level_id'],
@@ -1468,75 +1605,10 @@ class MQRService
      */
     private function insertMissingReferences(Collection $failures, string $kind): int
     {
-        $isInstitution = $kind === 'institution';
-        $table = $isInstitution ? 'ref_institusi' : 'ref_pengkhususan';
-        $connection = $this->mappingConnection();
-        $qualifiedTable = $this->qualifiedTableName($table);
-        $columns = $this->referenceColumns($qualifiedTable);
-        $codeColumn = $this->requireColumn(
-            $columns,
-            $isInstitution ? 'KOD' : 'kod'
-        );
-        $nameColumn = $this->requireColumn($columns, 'DISKRIPSI');
-        $references = $this->loadReferenceData();
-        $existingKeys = $isInstitution
-            ? $references['institution_alias']->keys()
-            : $references['specialization_exact']->keys();
-        $names = [];
+        $runId = $failures->first()?->run_id;
+        $records = MqrData::query()->whereIn('id', $failures->pluck('mqr_data_id'))->get();
 
-        foreach ($failures as $failure) {
-            $rawName = trim((string) (
-                $isInstitution
-                    ? $failure->nama_institusi
-                    : $failure->nama_kelayakan
-            ));
-            $key = $isInstitution
-                ? $this->normalizeText($rawName)
-                : $this->normalizeQualificationText($rawName);
-
-            if ($key === '' || $existingKeys->contains($key) || isset($names[$key])) {
-                continue;
-            }
-
-            $names[$key] = $rawName;
-        }
-
-        if ($names === []) {
-            return 0;
-        }
-
-        $deletedColumn = $this->optionalColumn($columns, 'is_deleted');
-        $approvedColumn = $this->optionalColumn($columns, 'SAH_YT');
-        $rows = [];
-        $nextCode = $this->nextReferenceCode(
-            $connection,
-            $qualifiedTable,
-            $codeColumn,
-            $isInstitution
-        );
-
-        foreach ($names as $name) {
-            $row = [
-                $codeColumn => $nextCode,
-                $nameColumn => $name,
-            ];
-
-            if ($deletedColumn !== null) {
-                $row[$deletedColumn] = 0;
-            }
-
-            if ($approvedColumn !== null) {
-                $row[$approvedColumn] = 'Y';
-            }
-
-            $this->assertReferenceRowAllowed($columns, $row);
-            $rows[] = $row;
-            $nextCode = $this->incrementReferenceCode($nextCode, $isInstitution);
-        }
-
-        $connection->table($qualifiedTable)->insert($rows);
-
-        return count($rows);
+        return $this->ensureReferences($records, $runId, $kind);
     }
 
     /**
@@ -1559,10 +1631,7 @@ class MQRService
             if ($mapping['success']) {
                 $institutionCode = (string) $mapping['institution']->KOD;
                 $specializationCode = (string) $mapping['specialization']->kod;
-                $successfulMappings[$this->mappingPairKey(
-                    $institutionCode,
-                    $specializationCode
-                )] = [
+                $successfulMappings[$this->mqaKey((string) $mqr->kod_rujukan_akreditasi_penuh)] = [
                     'kod_institusi' => $institutionCode,
                     'kod_pengkhususan' => $specializationCode,
                     'id_peringkat_kelulusan' => $mapping['qualification_level_id'],
@@ -1583,7 +1652,7 @@ class MQRService
                 ->update($replacement);
         }
 
-        $this->saveMappings(array_values($successfulMappings));
+        $this->saveMappings(array_values($successfulMappings), $runId);
 
         if ($matchedIds !== []) {
             MqrMappingFailure::query()
@@ -1609,17 +1678,24 @@ class MQRService
             return Schema::connection($connection->getName())->getColumns($table);
         }
 
-        [$schema, $name] = explode('.', $table, 2);
-        $grammar = $connection->getSchemaGrammar();
+        if ($connection->getDriverName() !== 'mysql') {
+            throw new \RuntimeException('Skema berasingan hanya disokong untuk MySQL.');
+        }
 
-        return $connection->getPostProcessor()->processColumns(
-            $connection->select(
-                $grammar->compileColumns(
-                    $schema,
-                    $connection->getTablePrefix().$name
-                )
-            )
-        );
+        [$schema, $name] = explode('.', $table, 2);
+
+        return $connection->table('information_schema.COLUMNS')
+            ->where('TABLE_SCHEMA', $schema)
+            ->where('TABLE_NAME', $connection->getTablePrefix().$name)
+            ->orderBy('ORDINAL_POSITION')
+            ->get()
+            ->map(fn ($column) => [
+                'name' => $column->COLUMN_NAME,
+                'nullable' => $column->IS_NULLABLE === 'YES',
+                'default' => $column->COLUMN_DEFAULT,
+                'auto_increment' => str_contains(strtolower((string) $column->EXTRA), 'auto_increment'),
+            ])
+            ->all();
     }
 
     /**

@@ -32,6 +32,12 @@ class MQRForm extends Component
 
     public $gagalCount = 0;
 
+    public int $kodMqaPenduaCount = 0;
+
+    public int $rekodDinyahaktifkanCount = 0;
+
+    public int $rujukanBaharuCount = 0;
+
     public $logBerjaya = [];
 
     public $logGagal = [];
@@ -170,6 +176,9 @@ class MQRForm extends Component
         $this->processedCount = (int) $state['processed'];
         $this->berjayaCount = (int) $state['berjaya'];
         $this->gagalCount = (int) $state['gagal'];
+        $this->kodMqaPenduaCount = (int) ($state['kod_mqa_pendua'] ?? 0);
+        $this->rekodDinyahaktifkanCount = (int) ($state['rekod_dinyahaktifkan'] ?? 0);
+        $this->rujukanBaharuCount = (int) ($state['rujukan_baharu'] ?? 0);
         $this->runStatus = (string) $state['status'];
         $this->hasActiveRun = in_array($state['status'], [
             MqrMappingRun::STATUS_RUNNING,

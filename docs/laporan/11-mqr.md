@@ -59,7 +59,28 @@ eSPP `MqrClient` menolak payload jika `< 1000` rekod.
 **Padanan**
 
 - Tulis ke `padanan_institusi_pengkhususan` pada connection `mqr_mapping`
-- Laporan muat turun: `/mqr/reports/{run}/{all|success|failure}`
+- Padanan institusi dan pengkhususan menggunakan nama tepat selepas trim dan tanpa mengira huruf besar/kecil. Nama baharu didaftarkan secara automatik ke jadual rujukan, lalu dipadankan dalam batch yang sama. Kod rujukan baharu ialah kod angka terbesar tambah satu.
+- Cawangan mempunyai rujukan institusi sendiri; `KUMPULAN_INSTITUSI` menghubungkan keluarga yang jelas seperti `UITM`, `IPGM`, `POLI` dan `UNIKL`. Kumpulan yang tidak dapat dipastikan dibiarkan kosong.
+- `JENIS_INSTITUSI` bagi institusi baharu mengikuti nilai rujukan sedia ada dalam kumpulan yang sama. Nama rasmi institusi awam tertentu yang tiada kumpulan turut dikenal pasti; rujukan lain menggunakan jenis `2`, selaras dengan pola rujukan sedia ada. Migrasi susulan mengisi nilai kosong pada institusi yang sudah didaftarkan oleh proses MQR tanpa mengubah nilai yang telah diisi.
+- `TARIKH_CIPTA` dan `TARIKH_UBAHSUAI` diisi serentak semasa institusi atau pengkhususan didaftarkan. Migrasi susulan menggunakan `created_at` dalam audit pendaftaran untuk mengisi tarikh kosong pada rujukan yang didaftarkan sebelum pembetulan, tanpa menimpa tarikh yang sedia ada.
+- Setiap kod MQA yang berbeza disimpan sebagai rekod padanan berasingan walaupun kod institusi dan pengkhususan sama. Satu kod MQA tidak boleh muncul pada lebih daripada satu padanan aktif. Rekod pendua lama disatukan kepada `kod` terkecil, selebihnya dinyahaktifkan dan diaudit.
+- Pengkhususan baharu mendapat `KATEGORI=1` jika mana-mana rekod nama sama menggunakan NEC `0110`–`0114`; selain itu `KATEGORI=2`.
+- Untuk `PeringkatKelayakan` MQR `9`, `id_peringkat_kelulusan` ialah `1` bagi NEC `0110`–`0114`, atau `2` bagi NEC lain. Kolum `peringkat_kelulusan` tidak diubah.
+- Laporan muat turun: `/mqr/reports/{run}/{all|success|failure|references|duplicates}`. Laporan pendua memaparkan ID yang dikekalkan/dinyahaktifkan, pasangan lama/akhir dan hasil padanan.
+
+### Pemindahan jadual padanan daripada MySQL ke MariaDB
+
+Navicat Data Transfer boleh menjana `mqr_kod_mqa_aktif ... VIRTUAL NULL` daripada metadata MySQL. MariaDB menolak `NULL` selepas `VIRTUAL`, walaupun lajur terjana itu sendiri boleh menghasilkan nilai NULL. Definisi yang sesuai disediakan dalam `database/sql/create_padanan_institusi_pengkhususan_mariadb.sql`.
+
+Untuk satu fail eksport yang boleh terus dijalankan pada MariaDB, gunakan `php artisan mqr:export-padanan-mariadb`. Lokasi fail dipaparkan selepas eksport; `--output=/lokasi/fail.sql` membenarkan lokasi khusus. Fail ini menggugurkan dan mencipta semula **jadual padanan sahaja**, kemudian memasukkan semua rekod tanpa lajur terjana. Data jadual sasaran yang sedia ada akan digantikan apabila fail dijalankan.
+
+Jika menggunakan Navicat Data Transfer pula:
+
+1. Cipta jadual pada MariaDB sasaran menggunakan skrip tersebut.
+2. Dalam Navicat Data Transfer, nyahpilih **Create tables** dan **Drop target objects before create**, tetapi kekalkan **Create records**. Pilih mod **Advanced → Custom fields** untuk jadual ini dan pindahkan semua lajur biasa kecuali `mqr_kod_mqa_aktif`; MariaDB akan menjana nilainya sendiri.
+3. Selepas pemindahan, semak jumlah rekod dan semak bahawa kod MQA aktif tidak mempunyai pendua dengan kumpulan `UPPER(TRIM(kod_mqa))`.
+
+Pemindahan semula ke jadual sasaran yang telah berisi akan menambah rekod; kosongkan jadual sasaran dahulu hanya jika ia memang salinan yang hendak diganti.
 
 ## Rujukan kod
 
