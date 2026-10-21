@@ -45,10 +45,6 @@ class KPTSKPGService {
     }
     public function callAPI($no_kp)
     {
-        if ($temporaryResponse = $this->temporaryTestingResponse($no_kp)) {
-            return $temporaryResponse;
-        }
-
         $tokenResponse = $this->GetToken()->json();
         $token = $tokenResponse['data']['auth_Token'] ?? null;
 
@@ -103,7 +99,11 @@ class KPTSKPGService {
         $uniqueData = [];
 
         foreach ($responseData['data'] as $record) {
-            if (! $this->hasAllowedCourseLevel($record)) {
+            if (
+                ! $this->hasAllowedCourseLevel($record)
+                || ! $this->hasAllowedStudentStatus($record)
+                || $this->hasExcludedCgpa($record)
+            ) {
                 continue;
             }
 
@@ -132,152 +132,6 @@ class KPTSKPGService {
         return $responseData;
     }
 
-    private function temporaryTestingResponse($no_kp): ?array
-    {
-        if ((string) $no_kp !== '000116030974') {
-            return null;
-        }
-
-        // Temporary SKPG fixture for integration testing only.
-        return [
-            'status' => '200',
-            'message' => [
-                'USER_AUTHENTICATED',
-                'CHECK CONNECTION',
-                'CONNECTION OPEN',
-                'CHECKING DATA IN TABLE',
-                'TOTAL ROW : 4',
-                'SUCCESS',
-            ],
-            'data' => [
-                [
-                    'id_univ' => '11',
-                    'univ_short' => 'UiTM',
-                    'univ_long' => 'Universiti Teknologi MARA',
-                    'std_name' => 'TEST DATA SKPG',
-                    'ic_no' => '000116030974',
-                    'end_date' => '2018-06-01',
-                    'course_code' => 'SR113',
-                    'course_long' => 'DIPLOMA PENGAJIAN SUKAN',
-                    'course_long_bi' => 'DIPLOMA IN SPORTS STUDIES',
-                    'level_course_id' => 2,
-                    'level_course_desc' => 'Diploma',
-                    'NEC_D6' => '1014',
-                    'graduation_name_bm' => 'Diploma Pengajian Sukan',
-                    'graduation_name_bi' => 'Diploma in Sports Studies',
-                    'majoring_bm' => '-2',
-                    'majoring_bi' => '-2',
-                    'NEC_D6C' => '1014',
-                    'status_pelajar' => 'Tamat Pengajian',
-                    'CGPA' => 3.05,
-                    'OKU_no' => null,
-                    'OKU_desc' => 'Tidak Cacat',
-                    'sponsor_desc' => 'Lain-lain Tajaan',
-                    'convocation_date' => null,
-                    'campus_name' => 'UiTM Kampus Jengka',
-                    'campus_code' => '029',
-                    'MQA_code' => 'MQA/SWA11987',
-                    'TarikhMula' => '08/05/2018',
-                    'TarikhTamat' => '12/06/2026',
-                    'NilaiTaraf' => 'Diploma',
-                ],
-                [
-                    'id_univ' => '11',
-                    'univ_short' => 'UiTM',
-                    'univ_long' => 'Universiti Teknologi MARA',
-                    'std_name' => 'TEST DATA SKPG',
-                    'ic_no' => '000116030974',
-                    'end_date' => '2020-06-01',
-                    'course_code' => 'SR243',
-                    'course_long' => 'SARJANA MUDA SAINS SUKAN (KEPUJIAN)',
-                    'course_long_bi' => 'BACHELOR OF SPORTS SCIENCE (HONS.)',
-                    'level_course_id' => 3,
-                    'level_course_desc' => 'Sarjana Muda/Ijazah Pertama',
-                    'NEC_D6' => '1014',
-                    'graduation_name_bm' => 'SARJANA MUDA SAINS SUKAN (KEPUJIAN)',
-                    'graduation_name_bi' => 'BACHELOR OF SPORTS SCIENCE (HONS.)',
-                    'majoring_bm' => '-2',
-                    'majoring_bi' => '-2',
-                    'NEC_D6C' => '1014',
-                    'status_pelajar' => 'Tamat Pengajian',
-                    'CGPA' => 2.99,
-                    'OKU_no' => null,
-                    'OKU_desc' => 'Tidak Cacat',
-                    'sponsor_desc' => 'PTPTN',
-                    'convocation_date' => '2024-06-30',
-                    'campus_name' => 'UiTM Kampus Jengka',
-                    'campus_code' => '029',
-                    'MQA_code' => 'MQA/SWA12085',
-                    'TarikhMula' => '08/05/2018',
-                    'TarikhTamat' => '12/06/2026',
-                    'NilaiTaraf' => 'Ijazah Sarjana Muda Kepujian',
-                ],
-                [
-                    'id_univ' => '9',
-                    'univ_short' => 'UPM',
-                    'univ_long' => 'Universiti Putra Malaysia',
-                    'std_name' => 'TEST DATA SKPG',
-                    'ic_no' => '000116030974',
-                    'end_date' => null,
-                    'course_code' => 'G14343GS209FPSK3',
-                    'course_long' => 'MASTER KESIHATAN PERSEKITARAN DAN PEKERJAAN',
-                    'course_long_bi' => 'MASTER OF ENVIRONMENTAL AND OCCUPATIONAL HEALTH',
-                    'level_course_id' => 4,
-                    'level_course_desc' => 'Sarjana',
-                    'NEC_D6' => '1022',
-                    'graduation_name_bm' => null,
-                    'graduation_name_bi' => null,
-                    'majoring_bm' => null,
-                    'majoring_bi' => null,
-                    'NEC_D6C' => null,
-                    'status_pelajar' => 'Berhenti - Sebab Peribadi',
-                    'CGPA' => null,
-                    'OKU_no' => null,
-                    'OKU_desc' => 'Tidak Cacat',
-                    'sponsor_desc' => 'Persendirian',
-                    'convocation_date' => null,
-                    'campus_name' => 'UNIVERSITI PUTRA MALAYSIA (KAMPUS SERDANG)',
-                    'campus_code' => 'UPMKS',
-                    'MQA_code' => 'MQA/SWA15247',
-                    'TarikhMula' => '10/02/2022',
-                    'TarikhTamat' => '12/06/2026',
-                    'NilaiTaraf' => 'Ijazah Sarjana',
-                ],
-                [
-                    'id_univ' => '18',
-                    'univ_short' => 'UKM',
-                    'univ_long' => 'Universiti Kebangsaan Malaysia',
-                    'std_name' => 'TEST DATA SKPG',
-                    'ic_no' => '000116030974',
-                    'end_date' => null,
-                    'course_code' => 'DRFAL(FSSK)-SKF',
-                    'course_long' => 'DOKTOR FALSAFAH',
-                    'course_long_bi' => 'DOCTOR OF PHILOSOPHY',
-                    'level_course_id' => 5,
-                    'level_course_desc' => 'Ph.D.',
-                    'NEC_D6' => '0310',
-                    'graduation_name_bm' => null,
-                    'graduation_name_bi' => null,
-                    'majoring_bm' => null,
-                    'majoring_bi' => null,
-                    'NEC_D6C' => null,
-                    'status_pelajar' => 'Aktif',
-                    'CGPA' => 0,
-                    'OKU_no' => null,
-                    'OKU_desc' => 'Tidak Cacat',
-                    'sponsor_desc' => 'PTPTN',
-                    'convocation_date' => null,
-                    'campus_name' => 'UKM-Bangi',
-                    'campus_code' => '001',
-                    'MQA_code' => 'MQA/SWA11604',
-                    'TarikhMula' => '13/05/2015',
-                    'TarikhTamat' => '12/06/2026',
-                    'NilaiTaraf' => '',
-                ],
-            ],
-        ];
-    }
-
     private function hasAllowedCourseLevel(mixed $record): bool
     {
         if (
@@ -292,6 +146,46 @@ class KPTSKPGService {
             ['2', '3', '4', '5', '6', '7'],
             true
         );
+    }
+
+    private function hasAllowedStudentStatus(mixed $record): bool
+    {
+        if (
+            ! is_array($record)
+            || ! isset($record['status_pelajar'])
+            || ! is_string($record['status_pelajar'])
+        ) {
+            return false;
+        }
+
+        return in_array(
+            strtoupper(trim($record['status_pelajar'])),
+            [
+                'AKTIF',
+                'AKTIF (KES KHAS)',
+                'AKTIF (OUTBOUND EXCHANGE)',
+                'TANGGUH PENGAJIAN',
+                'GAP YEAR KHIDMAT NEGARA',
+                'GAP YEAR KESUKARELAWAN',
+                'GAP YEAR UMUM',
+                'GANTUNG',
+                'TAMAT PENGAJIAN',
+            ],
+            true
+        );
+    }
+
+    private function hasExcludedCgpa(mixed $record): bool
+    {
+        if (
+            ! is_array($record)
+            || ! isset($record['CGPA'])
+            || ! is_numeric($record['CGPA'])
+        ) {
+            return false;
+        }
+
+        return in_array((float) $record['CGPA'], [-1.0, -2.0, -200.0], true);
     }
 
     private function canonicalizeForComparison(mixed $value): mixed

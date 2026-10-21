@@ -1,6 +1,6 @@
 # KPT SKPG
 
-Semakan maklumat pelajar melalui sistem KPT SKPG (MOHE Student). Hub menapis tahap kursus dan buang rekod pendua.
+Semakan maklumat pelajar melalui sistem KPT SKPG (MOHE Student). Hub menapis tahap kursus dan status pelajar serta membuang rekod pendua.
 
 | Medan | Nilai |
 |-------|--------|
@@ -41,7 +41,7 @@ Live SIT box: host `eSPP2F1`, IP `10.29.53.228`, app `/var/www/myspp_integration
 | Database | Tiada DB SKPG di sisi SPP. Extra hub DBs: iSCAF `iscaf_test` @ `10.29.50.225`; MQR mapping `spp_ref` @ `10.29.53.234` |
 | Middleware / API Gateway | Username/password → Bearer `data.auth_Token` |
 | Network | Hub `10.29.53.228` → HTTPS `amgs.mohe.gov.my` |
-| Versi API / service | `/Login` + `/MOHE/Student` (tiada nombor versi). Filter SPP: `level_course_id` `2–7` |
+| Versi API / service | `/Login` + `/MOHE/Student` (tiada nombor versi). Filter SPP: `level_course_id` `2–7` dan senarai `status_pelajar` di bawah |
 | Tarikh deployment | **Perlu diisi** (agensi) |
 
 MySPP memanggil SIT terus: `_mapps/akademik/sql_akademik.php` → `callKptSkpgApi()`.
@@ -87,6 +87,9 @@ MySPP memanggil SIT terus: `_mapps/akademik/sql_akademik.php` → `callKptSkpgAp
 **Tapisan di hub**
 
 - Hanya rekod dengan `level_course_id` ∈ `2, 3, 4, 5, 6, 7`
+- Hanya rekod dengan `status_pelajar` berikut diterima (huruf besar/kecil dan ruang di tepi diabaikan): `Aktif`, `Aktif (Kes Khas)`, `Aktif (Outbound Exchange)`, `Tangguh Pengajian`, `Gap Year Khidmat Negara`, `Gap Year Kesukarelawan`, `Gap Year Umum`, `Gantung`, dan `Tamat Pengajian`.
+- Status lain, termasuk `Aktif (Inbound Exchange)` dan `Tamat Pengajian Dengan Sebab Lain`, serta rekod tanpa status ditolak.
+- Rekod dengan `CGPA` bernilai `-1`, `-2` atau `-200` ditolak. Nilai nombor dan rentetan nombor dipadankan secara angka; kod negatif lain tidak ditapis oleh syarat ini.
 - Pendua dibuang (hash kanonikal)
 - Mesej `TOTAL ROW : N` dikemas kini
 

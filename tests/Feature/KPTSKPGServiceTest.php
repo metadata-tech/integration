@@ -12,30 +12,24 @@ beforeEach(function (): void {
     Http::preventStrayRequests();
 });
 
-it('returns four temporary SKPG testing records for the configured IC', function () {
+it('requests upstream SKPG data for the former testing IC', function () {
+    $upstreamResponse = [
+        'status' => '200',
+        'message' => ['TOTAL ROW : 1', 'SUCCESS'],
+        'data' => [
+            ['ic_no' => '000116030974', 'level_course_id' => 2, 'status_pelajar' => 'Aktif', 'course_code' => 'UPSTREAM'],
+        ],
+    ];
+
+    fakeKptSkpgResponse($upstreamResponse);
+
     $result = app(KPTSKPGService::class)->callAPI('000116030974');
 
-    expect($result['status'])->toBe('200')
-        ->and($result['message'])->toContain('TOTAL ROW : 4')
-        ->and($result['data'])->toHaveCount(4)
-        ->and(array_column($result['data'], 'ic_no'))->toBe([
-            '000116030974',
-            '000116030974',
-            '000116030974',
-            '000116030974',
-        ])
-        ->and(array_column($result['data'], 'level_course_desc'))->toBe([
-            'Diploma',
-            'Sarjana Muda/Ijazah Pertama',
-            'Sarjana',
-            'Ph.D.',
-        ])
-        ->and(array_column($result['data'], 'status_pelajar'))->toBe([
-            'Tamat Pengajian',
-            'Tamat Pengajian',
-            'Berhenti - Sebab Peribadi',
-            'Aktif',
-        ]);
+    expect($result)->toBe($upstreamResponse);
+
+    Http::assertSentCount(2);
+    Http::assertSent(fn ($request) => $request->url() === 'https://kpt.test/MOHE/Student'
+        && $request['ic_no'] === '000116030974');
 });
 
 it('removes duplicate KPT records and updates the total row message', function () {
@@ -47,6 +41,7 @@ it('removes duplicate KPT records and updates the total row message', function (
         'course_code' => 'SSNKOM(TEKPRISIAN)-TTV',
         'course_long' => "SARJANA SAINS KOMPUTER (TEKNOLOGI PERISIAN)\n",
         'level_course_id' => 4,
+        'status_pelajar' => 'Tamat Pengajian',
         'CGPA' => 3.7,
         'campus_code' => '001',
         'MQA_code' => 'MQA/SWA13128',
@@ -89,6 +84,7 @@ it('keeps different qualifications even when their dates are the same', function
         'ic_no' => '760122075273',
         'id_univ' => '18',
         'level_course_id' => 4,
+        'status_pelajar' => 'Aktif',
         'course_code' => 'COURSE-A',
         'end_date' => '2018-08-27',
         'MQA_code' => 'MQA/A',
@@ -117,6 +113,7 @@ it('treats key order and line endings as non-meaningful differences', function (
     $first = [
         'ic_no' => '760122075273',
         'level_course_id' => 4,
+        'status_pelajar' => 'Aktif',
         'course_code' => 'COURSE-A',
         'course_long' => "PROGRAM KOMPUTER\r\n",
         'MQA_code' => 'MQA/A',
@@ -138,12 +135,12 @@ it('treats key order and line endings as non-meaningful differences', function (
 
 it('only returns course levels two through seven', function () {
     $records = [
-        ['course_code' => 'LEVEL-1', 'level_course_id' => 1],
-        ['course_code' => 'LEVEL-2', 'level_course_id' => 2],
-        ['course_code' => 'LEVEL-3', 'level_course_id' => '3'],
-        ['course_code' => 'LEVEL-7', 'level_course_id' => ' 7 '],
-        ['course_code' => 'LEVEL-8', 'level_course_id' => 8],
-        ['course_code' => 'NO-LEVEL'],
+        ['course_code' => 'LEVEL-1', 'level_course_id' => 1, 'status_pelajar' => 'Aktif'],
+        ['course_code' => 'LEVEL-2', 'level_course_id' => 2, 'status_pelajar' => 'Aktif'],
+        ['course_code' => 'LEVEL-3', 'level_course_id' => '3', 'status_pelajar' => 'Aktif'],
+        ['course_code' => 'LEVEL-7', 'level_course_id' => ' 7 ', 'status_pelajar' => 'Aktif'],
+        ['course_code' => 'LEVEL-8', 'level_course_id' => 8, 'status_pelajar' => 'Aktif'],
+        ['course_code' => 'NO-LEVEL', 'status_pelajar' => 'Aktif'],
     ];
 
     fakeKptSkpgResponse([
@@ -159,6 +156,82 @@ it('only returns course levels two through seven', function () {
         'LEVEL-3',
         'LEVEL-7',
     ])->and($result['message'])->toContain('TOTAL ROW : 3');
+});
+
+it('only returns the selected enrolment statuses or completed studies', function () {
+    $records = [
+        ['course_code' => 'ACTIVE', 'level_course_id' => 2, 'status_pelajar' => 'Aktif'],
+        ['course_code' => 'COMPLETED', 'level_course_id' => 3, 'status_pelajar' => 'Tamat Pengajian'],
+        ['course_code' => 'ACTIVE-UPPER', 'level_course_id' => 4, 'status_pelajar' => ' AKTIF '],
+        ['course_code' => 'COMPLETED-LOWER', 'level_course_id' => 5, 'status_pelajar' => 'tamat pengajian'],
+        ['course_code' => 'SPECIAL', 'level_course_id' => 2, 'status_pelajar' => 'Aktif (Kes Khas)'],
+        ['course_code' => 'OUTBOUND', 'level_course_id' => 2, 'status_pelajar' => 'Aktif (Outbound Exchange)'],
+        ['course_code' => 'DEFERRED', 'level_course_id' => 2, 'status_pelajar' => 'Tangguh Pengajian'],
+        ['course_code' => 'NATIONAL-SERVICE', 'level_course_id' => 2, 'status_pelajar' => 'Gap Year Khidmat Negara'],
+        ['course_code' => 'VOLUNTEERING', 'level_course_id' => 2, 'status_pelajar' => 'Gap Year Kesukarelawan'],
+        ['course_code' => 'GAP-YEAR', 'level_course_id' => 2, 'status_pelajar' => 'Gap Year Umum'],
+        ['course_code' => 'SUSPENDED', 'level_course_id' => 2, 'status_pelajar' => 'Gantung'],
+        ['course_code' => 'INBOUND', 'level_course_id' => 2, 'status_pelajar' => 'Aktif (Inbound Exchange)'],
+        ['course_code' => 'OTHER-COMPLETION', 'level_course_id' => 3, 'status_pelajar' => 'Tamat Pengajian Dengan Sebab Lain'],
+        ['course_code' => 'WITHDRAWN', 'level_course_id' => 4, 'status_pelajar' => 'Berhenti - Sebab Peribadi'],
+        ['course_code' => 'NULL-STATUS', 'level_course_id' => 5, 'status_pelajar' => null],
+        ['course_code' => 'MISSING-STATUS', 'level_course_id' => 6],
+    ];
+
+    fakeKptSkpgResponse([
+        'status' => '200',
+        'message' => ['TOTAL ROW : 16', 'SUCCESS'],
+        'data' => $records,
+    ]);
+
+    $result = app(KPTSKPGService::class)->callAPI('760122075273');
+
+    expect(array_column($result['data'], 'course_code'))->toBe([
+        'ACTIVE',
+        'COMPLETED',
+        'ACTIVE-UPPER',
+        'COMPLETED-LOWER',
+        'SPECIAL',
+        'OUTBOUND',
+        'DEFERRED',
+        'NATIONAL-SERVICE',
+        'VOLUNTEERING',
+        'GAP-YEAR',
+        'SUSPENDED',
+    ])->and($result['message'])->toBe(['TOTAL ROW : 11', 'SUCCESS']);
+});
+
+it('excludes only the specified CGPA codes', function () {
+    $records = [
+        ['course_code' => 'MINUS-ONE', 'level_course_id' => 2, 'status_pelajar' => 'Aktif', 'CGPA' => -1],
+        ['course_code' => 'MINUS-ONE-DECIMAL', 'level_course_id' => 2, 'status_pelajar' => 'Aktif', 'CGPA' => '-1.0'],
+        ['course_code' => 'MINUS-TWO', 'level_course_id' => 2, 'status_pelajar' => 'Aktif', 'CGPA' => -2],
+        ['course_code' => 'MINUS-TWO-SPACED', 'level_course_id' => 2, 'status_pelajar' => 'Aktif', 'CGPA' => ' -2 '],
+        ['course_code' => 'MINUS-TWO-HUNDRED', 'level_course_id' => 2, 'status_pelajar' => 'Aktif', 'CGPA' => '-200'],
+        ['course_code' => 'MINUS-ONE-HUNDRED', 'level_course_id' => 2, 'status_pelajar' => 'Aktif', 'CGPA' => -100],
+        ['course_code' => 'MINUS-THREE-HUNDRED', 'level_course_id' => 2, 'status_pelajar' => 'Aktif', 'CGPA' => -300],
+        ['course_code' => 'ZERO', 'level_course_id' => 2, 'status_pelajar' => 'Aktif', 'CGPA' => 0],
+        ['course_code' => 'VALID', 'level_course_id' => 2, 'status_pelajar' => 'Aktif', 'CGPA' => 3.45],
+        ['course_code' => 'NULL-CGPA', 'level_course_id' => 2, 'status_pelajar' => 'Aktif', 'CGPA' => null],
+        ['course_code' => 'MISSING-CGPA', 'level_course_id' => 2, 'status_pelajar' => 'Aktif'],
+    ];
+
+    fakeKptSkpgResponse([
+        'status' => '200',
+        'message' => ['TOTAL ROW : 11', 'SUCCESS'],
+        'data' => $records,
+    ]);
+
+    $result = app(KPTSKPGService::class)->callAPI('760122075273');
+
+    expect(array_column($result['data'], 'course_code'))->toBe([
+        'MINUS-ONE-HUNDRED',
+        'MINUS-THREE-HUNDRED',
+        'ZERO',
+        'VALID',
+        'NULL-CGPA',
+        'MISSING-CGPA',
+    ])->and($result['message'])->toBe(['TOTAL ROW : 6', 'SUCCESS']);
 });
 
 it('leaves non-list response data unchanged', function () {
