@@ -1,8 +1,11 @@
 <?php
 
 use App\Models\APILog;
+use App\Models\User;
+use App\Livewire\KPTSKPGForm;
 use App\Services\KPTSKPGService;
 use Illuminate\Support\Facades\Http;
+use Livewire\Livewire;
 
 beforeEach(function (): void {
     config()->set('services.kpt_skpg.url', 'https://kpt.test');
@@ -30,6 +33,56 @@ it('requests upstream SKPG data for the former testing IC', function () {
     Http::assertSentCount(2);
     Http::assertSent(fn ($request) => $request->url() === 'https://kpt.test/MOHE/Student'
         && $request['ic_no'] === '000116030974');
+});
+
+it('filters the API response but shows the unmodified KPT response on the integration page', function () {
+    $validRecord = [
+        'course_code' => 'VALID',
+        'level_course_id' => 2,
+        'status_pelajar' => 'Aktif',
+        'CGPA' => 3.5,
+    ];
+    $upstreamResponse = [
+        'status' => '200',
+        'message' => ['TOTAL ROW : 5', 'SUCCESS'],
+        'data' => [
+            $validRecord,
+            $validRecord,
+            ['course_code' => 'WRONG-LEVEL', 'level_course_id' => 8, 'status_pelajar' => 'Aktif', 'CGPA' => 3.5],
+            ['course_code' => 'WRONG-STATUS', 'level_course_id' => 2, 'status_pelajar' => 'Berhenti - Sebab Peribadi', 'CGPA' => 3.5],
+            ['course_code' => 'WRONG-CGPA', 'level_course_id' => 2, 'status_pelajar' => 'Aktif', 'CGPA' => -1],
+        ],
+    ];
+
+    fakeKptSkpgResponse($upstreamResponse);
+
+    $this->actingAs(User::factory()->create())
+        ->getJson('/api/kpt/skpg?no_kp=760122075273')
+        ->assertOk()
+        ->assertExactJson([
+            'status' => '200',
+            'message' => ['TOTAL ROW : 1', 'SUCCESS'],
+            'data' => [$validRecord],
+        ]);
+
+    Livewire::test(KPTSKPGForm::class)
+        ->set('no_kp', '760122075273')
+        ->call('process')
+        ->assertSet('result', $upstreamResponse)
+        ->assertSee('WRONG-LEVEL');
+
+    Http::assertSentCount(4);
+
+    $studentLogs = APILog::query()
+        ->where('url', 'https://kpt.test/MOHE/Student')
+        ->orderBy('id')
+        ->get();
+
+    expect($studentLogs)->toHaveCount(2)
+        ->and($studentLogs->pluck('output')->all())->toBe([
+            $upstreamResponse,
+            $upstreamResponse,
+        ]);
 });
 
 it('removes duplicate KPT records and updates the total row message', function () {

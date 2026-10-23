@@ -2,7 +2,6 @@
 
 namespace App\Livewire;
 
-use App\Services\KPTService;
 use App\Services\KPTSKPGService;
 use Livewire\Component;
 
@@ -14,7 +13,6 @@ class KPTSKPGForm extends Component
 
     public function mount()
     {
-        ray("mount");
         $this->no_kp = "880415016011";
     }
 
@@ -25,12 +23,6 @@ class KPTSKPGForm extends Component
 
     public function process(KPTSKPGService $service)
     {
-        ray("call API");
-
-        $this->kptService = $service;
-        $x = $this->kptService->callAPI($this->no_kp);
-        ray($x);
-
-        $this->result = $x;
+        $this->result = $service->callUnfilteredAPI($this->no_kp);
     }
 }

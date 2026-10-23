@@ -45,6 +45,15 @@ class KPTSKPGService {
     }
     public function callAPI($no_kp)
     {
+        $responseData = $this->callUnfilteredAPI($no_kp);
+
+        return is_array($responseData)
+            ? $this->filterResponseData($responseData)
+            : $responseData;
+    }
+
+    public function callUnfilteredAPI($no_kp)
+    {
         $tokenResponse = $this->GetToken()->json();
         $token = $tokenResponse['data']['auth_Token'] ?? null;
 
@@ -80,9 +89,7 @@ class KPTSKPGService {
             'status_code' => $response->getStatusCode()
         ]);
 
-        return is_array($responseData)
-            ? $this->filterResponseData($responseData)
-            : $responseData;
+        return $responseData;
     }
 
     private function filterResponseData(array $responseData): array

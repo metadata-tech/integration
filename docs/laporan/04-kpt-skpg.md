@@ -1,6 +1,6 @@
 # KPT SKPG
 
-Semakan maklumat pelajar melalui sistem KPT SKPG (MOHE Student). Hub menapis tahap kursus dan status pelajar serta membuang rekod pendua.
+Semakan maklumat pelajar melalui sistem KPT SKPG (MOHE Student). Endpoint API menapis tahap kursus, status pelajar, dan CGPA serta membuang rekod pendua. Halaman integrasi memaparkan respons asal KPT.
 
 | Medan | Nilai |
 |-------|--------|
@@ -84,7 +84,7 @@ MySPP memanggil SIT terus: `_mapps/akademik/sql_akademik.php` → `callKptSkpgAp
 - Body: `{ "ic_no": "{no_kp}" }`
 - Header: `Authorization: Bearer {token}`
 
-**Tapisan di hub**
+**Tapisan untuk `GET /api/kpt/skpg` sahaja**
 
 - Hanya rekod dengan `level_course_id` ∈ `2, 3, 4, 5, 6, 7`
 - Hanya rekod dengan `status_pelajar` berikut diterima (huruf besar/kecil dan ruang di tepi diabaikan): `Aktif`, `Aktif (Kes Khas)`, `Aktif (Outbound Exchange)`, `Tangguh Pengajian`, `Gap Year Khidmat Negara`, `Gap Year Kesukarelawan`, `Gap Year Umum`, `Gantung`, dan `Tamat Pengajian`.
@@ -92,6 +92,8 @@ MySPP memanggil SIT terus: `_mapps/akademik/sql_akademik.php` → `callKptSkpgAp
 - Rekod dengan `CGPA` bernilai `-1`, `-2` atau `-200` ditolak. Nilai nombor dan rentetan nombor dipadankan secara angka; kod negatif lain tidak ditapis oleh syarat ini.
 - Pendua dibuang (hash kanonikal)
 - Mesej `TOTAL ROW : N` dikemas kini
+
+Halaman integrasi SKPG menggunakan respons asal KPT tanpa tapisan atau pembuangan pendua. Nilai `TOTAL ROW` pada halaman dan dalam log API kekal seperti diterima daripada KPT.
 
 ## Rujukan kod
 
